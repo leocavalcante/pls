@@ -57,66 +57,128 @@ function collectHintsFromStatement(
 			collectHintsFromExpression(statement.expression, range, hints, index);
 			break;
 		case 'ReturnStatement':
-			if (statement.argument) {
-				collectHintsFromExpression(statement.argument, range, hints, index);
-			}
+			handleReturnStatement(statement, range, hints, index);
 			break;
 		case 'IfStatement':
-			collectHintsFromExpression(statement.test, range, hints, index);
-			collectHintsFromStatement(statement.consequent, range, hints, index);
-			if (statement.alternate) {
-				collectHintsFromStatement(statement.alternate, range, hints, index);
-			}
+			handleIfStatement(statement, range, hints, index);
 			break;
 		case 'WhileStatement':
 		case 'DoWhileStatement':
-			collectHintsFromExpression(statement.test, range, hints, index);
-			collectHintsFromStatement(statement.body, range, hints, index);
+			handleLoopStatement(statement, range, hints, index);
 			break;
 		case 'ForStatement':
-			for (const init of statement.init) {
-				collectHintsFromExpression(init, range, hints, index);
-			}
-			for (const test of statement.test) {
-				collectHintsFromExpression(test, range, hints, index);
-			}
-			for (const update of statement.update) {
-				collectHintsFromExpression(update, range, hints, index);
-			}
-			collectHintsFromStatement(statement.body, range, hints, index);
+			handleForStatement(statement, range, hints, index);
 			break;
 		case 'ForeachStatement':
-			collectHintsFromExpression(statement.source, range, hints, index);
-			if (statement.key) {
-				collectHintsFromExpression(statement.key, range, hints, index);
-			}
-			collectHintsFromExpression(statement.value, range, hints, index);
-			collectHintsFromStatement(statement.body, range, hints, index);
+			handleForeachStatement(statement, range, hints, index);
 			break;
 		case 'BlockStatement':
 			collectHintsFromStatements(statement.statements, range, hints, index);
 			break;
 		case 'FunctionDeclaration':
-			addReturnTypeHint(statement, range, hints);
-			if (statement.body) {
-				collectHintsFromStatement(statement.body, range, hints, index);
-			}
+			handleFunctionDeclaration(statement, range, hints, index);
 			break;
 		case 'ClassDeclaration':
 			collectHintsFromClass(statement, range, hints, index);
 			break;
 		case 'TryStatement':
-			collectHintsFromStatement(statement.block, range, hints, index);
-			for (const catchClause of statement.catches) {
-				collectHintsFromStatement(catchClause.body, range, hints, index);
-			}
-			if (statement.finalizer) {
-				collectHintsFromStatement(statement.finalizer, range, hints, index);
-			}
+			handleTryStatement(statement, range, hints, index);
 			break;
 		case 'ThrowStatement':
 			collectHintsFromExpression(statement.argument, range, hints, index);
 			break;
+	}
+}
+
+function handleReturnStatement(
+	statement: Statement & { kind: 'ReturnStatement' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	if (!statement.argument) return;
+	collectHintsFromExpression(statement.argument, range, hints, index);
+}
+
+function handleIfStatement(
+	statement: Statement & { kind: 'IfStatement' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(statement.test, range, hints, index);
+	collectHintsFromStatement(statement.consequent, range, hints, index);
+	if (statement.alternate) {
+		collectHintsFromStatement(statement.alternate, range, hints, index);
+	}
+}
+
+function handleLoopStatement(
+	statement: Statement & { kind: 'WhileStatement' | 'DoWhileStatement' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(statement.test, range, hints, index);
+	collectHintsFromStatement(statement.body, range, hints, index);
+}
+
+function handleForStatement(
+	statement: Statement & { kind: 'ForStatement' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	for (const init of statement.init) {
+		collectHintsFromExpression(init, range, hints, index);
+	}
+	for (const test of statement.test) {
+		collectHintsFromExpression(test, range, hints, index);
+	}
+	for (const update of statement.update) {
+		collectHintsFromExpression(update, range, hints, index);
+	}
+	collectHintsFromStatement(statement.body, range, hints, index);
+}
+
+function handleForeachStatement(
+	statement: Statement & { kind: 'ForeachStatement' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(statement.source, range, hints, index);
+	if (statement.key) {
+		collectHintsFromExpression(statement.key, range, hints, index);
+	}
+	collectHintsFromExpression(statement.value, range, hints, index);
+	collectHintsFromStatement(statement.body, range, hints, index);
+}
+
+function handleFunctionDeclaration(
+	statement: FunctionDeclaration,
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	addReturnTypeHint(statement, range, hints);
+	if (statement.body) {
+		collectHintsFromStatement(statement.body, range, hints, index);
+	}
+}
+
+function handleTryStatement(
+	statement: Statement & { kind: 'TryStatement' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromStatement(statement.block, range, hints, index);
+	for (const catchClause of statement.catches) {
+		collectHintsFromStatement(catchClause.body, range, hints, index);
+	}
+	if (statement.finalizer) {
+		collectHintsFromStatement(statement.finalizer, range, hints, index);
 	}
 }
 
@@ -148,65 +210,146 @@ function collectHintsFromExpression(
 
 	switch (expression.kind) {
 		case 'CallExpression':
-			addParameterHints(expression, hints, index, false);
-			collectHintsFromExpression(expression.callee, range, hints, index);
-			for (const arg of expression.arguments) {
-				collectHintsFromExpression(arg.value, range, hints, index);
-			}
+			handleCallExpression(expression, range, hints, index);
 			break;
 		case 'MethodCallExpression':
-			addParameterHintsForMethod(expression, hints, index);
-			collectHintsFromExpression(expression.object, range, hints, index);
-			collectHintsFromExpression(expression.property, range, hints, index);
-			for (const arg of expression.arguments) {
-				collectHintsFromExpression(arg.value, range, hints, index);
-			}
+			handleMethodCallExpression(expression, range, hints, index);
 			break;
 		case 'NewExpression':
-			collectHintsFromExpression(expression.class, range, hints, index);
-			for (const arg of expression.arguments) {
-				collectHintsFromExpression(arg.value, range, hints, index);
-			}
+			handleNewExpression(expression, range, hints, index);
 			break;
 		case 'BinaryExpression':
-			collectHintsFromExpression(expression.left, range, hints, index);
-			collectHintsFromExpression(expression.right, range, hints, index);
+			handleBinaryExpression(expression, range, hints, index);
 			break;
 		case 'UnaryExpression':
 			collectHintsFromExpression(expression.argument, range, hints, index);
 			break;
 		case 'AssignmentExpression':
-			collectHintsFromExpression(expression.left, range, hints, index);
-			collectHintsFromExpression(expression.right, range, hints, index);
+			handleAssignmentExpression(expression, range, hints, index);
 			break;
 		case 'TernaryExpression':
-			collectHintsFromExpression(expression.test, range, hints, index);
-			if (expression.consequent) {
-				collectHintsFromExpression(expression.consequent, range, hints, index);
-			}
-			collectHintsFromExpression(expression.alternate, range, hints, index);
+			handleTernaryExpression(expression, range, hints, index);
 			break;
 		case 'ArrayExpression':
-			for (const item of expression.items) {
-				if (item.key) {
-					collectHintsFromExpression(item.key, range, hints, index);
-				}
-				collectHintsFromExpression(item.value, range, hints, index);
-			}
+			handleArrayExpression(expression, range, hints, index);
 			break;
 		case 'PropertyAccessExpression':
-			collectHintsFromExpression(expression.object, range, hints, index);
-			collectHintsFromExpression(expression.property, range, hints, index);
+			handlePropertyAccessExpression(expression, range, hints, index);
 			break;
 		case 'ArrayAccessExpression':
-			collectHintsFromExpression(expression.array, range, hints, index);
-			if (expression.index) {
-				collectHintsFromExpression(expression.index, range, hints, index);
-			}
+			handleArrayAccessExpression(expression, range, hints, index);
 			break;
 		case 'ParenthesizedExpression':
 			collectHintsFromExpression(expression.expression, range, hints, index);
 			break;
+	}
+}
+
+function handleCallExpression(
+	expression: Expression & { kind: 'CallExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	addParameterHints(expression, hints, index, false);
+	collectHintsFromExpression(expression.callee, range, hints, index);
+	for (const arg of expression.arguments) {
+		collectHintsFromExpression(arg.value, range, hints, index);
+	}
+}
+
+function handleMethodCallExpression(
+	expression: Expression & { kind: 'MethodCallExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	addParameterHintsForMethod(expression, hints, index);
+	collectHintsFromExpression(expression.object, range, hints, index);
+	collectHintsFromExpression(expression.property, range, hints, index);
+	for (const arg of expression.arguments) {
+		collectHintsFromExpression(arg.value, range, hints, index);
+	}
+}
+
+function handleNewExpression(
+	expression: Expression & { kind: 'NewExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(expression.class, range, hints, index);
+	for (const arg of expression.arguments) {
+		collectHintsFromExpression(arg.value, range, hints, index);
+	}
+}
+
+function handleBinaryExpression(
+	expression: Expression & { kind: 'BinaryExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(expression.left, range, hints, index);
+	collectHintsFromExpression(expression.right, range, hints, index);
+}
+
+function handleAssignmentExpression(
+	expression: Expression & { kind: 'AssignmentExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(expression.left, range, hints, index);
+	collectHintsFromExpression(expression.right, range, hints, index);
+}
+
+function handleTernaryExpression(
+	expression: Expression & { kind: 'TernaryExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(expression.test, range, hints, index);
+	if (expression.consequent) {
+		collectHintsFromExpression(expression.consequent, range, hints, index);
+	}
+	collectHintsFromExpression(expression.alternate, range, hints, index);
+}
+
+function handleArrayExpression(
+	expression: Expression & { kind: 'ArrayExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	for (const item of expression.items) {
+		if (item.key) {
+			collectHintsFromExpression(item.key, range, hints, index);
+		}
+		collectHintsFromExpression(item.value, range, hints, index);
+	}
+}
+
+function handlePropertyAccessExpression(
+	expression: Expression & { kind: 'PropertyAccessExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(expression.object, range, hints, index);
+	collectHintsFromExpression(expression.property, range, hints, index);
+}
+
+function handleArrayAccessExpression(
+	expression: Expression & { kind: 'ArrayAccessExpression' },
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	collectHintsFromExpression(expression.array, range, hints, index);
+	if (expression.index) {
+		collectHintsFromExpression(expression.index, range, hints, index);
 	}
 }
 
