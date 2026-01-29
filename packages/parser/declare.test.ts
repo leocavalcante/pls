@@ -96,3 +96,154 @@ describe('Parser - Match as Property Name', () => {
 		}
 	});
 });
+
+describe('Parser - Cast Expressions', () => {
+	test('parses (int) cast', () => {
+		const ast = parser.parse('<?php $x = (int)$y;');
+		const stmt = ast.statements[0];
+		expect(stmt?.kind).toBe('ExpressionStatement');
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			expect(stmt.expression.right.kind).toBe('CastExpression');
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('int');
+			}
+		}
+	});
+
+	test('parses (integer) as int', () => {
+		const ast = parser.parse('<?php $x = (integer)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('int');
+			}
+		}
+	});
+
+	test('parses (string) cast', () => {
+		const ast = parser.parse('<?php $x = (string)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('string');
+			}
+		}
+	});
+
+	test('parses (array) cast', () => {
+		const ast = parser.parse('<?php $x = (array)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('array');
+			}
+		}
+	});
+
+	test('parses (bool) cast', () => {
+		const ast = parser.parse('<?php $x = (bool)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('bool');
+			}
+		}
+	});
+
+	test('parses (boolean) as bool', () => {
+		const ast = parser.parse('<?php $x = (boolean)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('bool');
+			}
+		}
+	});
+
+	test('parses (float) cast', () => {
+		const ast = parser.parse('<?php $x = (float)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('float');
+			}
+		}
+	});
+
+	test('parses (double) as float', () => {
+		const ast = parser.parse('<?php $x = (double)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('float');
+			}
+		}
+	});
+
+	test('parses (object) cast', () => {
+		const ast = parser.parse('<?php $x = (object)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('object');
+			}
+		}
+	});
+
+	test('parses (unset) cast', () => {
+		const ast = parser.parse('<?php $x = (unset)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('unset');
+			}
+		}
+	});
+
+	test('parses cast with method chain', () => {
+		const ast = parser.parse('<?php $x = (array)$input->getOption("foo");');
+		const stmt = ast.statements[0];
+		expect(stmt?.kind).toBe('ExpressionStatement');
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			expect(stmt.expression.right.kind).toBe('CastExpression');
+		}
+	});
+
+	test('parses nested casts', () => {
+		const ast = parser.parse('<?php $x = (string)(int)$y;');
+		const stmt = ast.statements[0];
+		if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+			expect(stmt.expression.right.kind).toBe('CastExpression');
+			if (stmt.expression.right.kind === 'CastExpression') {
+				expect(stmt.expression.right.type).toBe('string');
+				expect(stmt.expression.right.argument.kind).toBe('CastExpression');
+			}
+		}
+	});
+});
+
+describe('Parser - Keywords as Property Names', () => {
+	test('parses default as method name', () => {
+		const ast = parser.parse('<?php $x->default("value");');
+		const stmt = ast.statements[0];
+		expect(stmt?.kind).toBe('ExpressionStatement');
+	});
+
+	test('parses case as property name', () => {
+		const ast = parser.parse('<?php $x->case;');
+		const stmt = ast.statements[0];
+		expect(stmt?.kind).toBe('ExpressionStatement');
+	});
+
+	test('parses if as method name', () => {
+		const ast = parser.parse('<?php $builder->if($condition);');
+		const stmt = ast.statements[0];
+		expect(stmt?.kind).toBe('ExpressionStatement');
+	});
+
+	test('parses array as property name', () => {
+		const ast = parser.parse('<?php $x->array;');
+		const stmt = ast.statements[0];
+		expect(stmt?.kind).toBe('ExpressionStatement');
+	});
+});
