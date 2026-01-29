@@ -108,7 +108,7 @@ function checkImportActions(
 		return { shouldReturn: false, actions: [] };
 	}
 
-	if (word.startsWith('\\')) {
+	if (word.startsWith('\\') || node.name.startsWith('\\')) {
 		return { shouldReturn: true, actions: [] };
 	}
 
