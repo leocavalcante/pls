@@ -1,8 +1,48 @@
 import type { Program } from '@pls/parser';
 import type { Hover, HoverParams, MarkupKind } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { DefinitionIndex } from '../definition-index';
+import type { DefinitionIndex, IndexedSymbol } from '../definition-index';
 import { findNodeAtPosition, getWordAtPosition } from '../position-utils';
+
+function extractSymbolName(word: string): string {
+	return word.startsWith('$') ? word.slice(1) : word;
+}
+
+function buildDefinitionContents(def: IndexedSymbol): string[] {
+	const contents: string[] = [];
+
+	if (def.signature) {
+		contents.push('```php', def.signature, '```');
+	} else if (def.type) {
+		contents.push('```php', `${def.kind} ${def.name}: ${def.type}`, '```');
+	} else {
+		contents.push('```php', `${def.kind} ${def.name}`, '```');
+	}
+
+	if (def.container) {
+		contents.push(`Defined in \`${def.container}\``);
+	}
+
+	return contents;
+}
+
+function createMarkdownHover(value: string): Hover {
+	return {
+		contents: {
+			kind: 'markdown' as MarkupKind,
+			value,
+		},
+	};
+}
+
+function createDefinitionHover(def: IndexedSymbol): Hover {
+	const contents = buildDefinitionContents(def);
+	return createMarkdownHover(contents.join('\n'));
+}
+
+function createVariableHover(variableName: string): Hover {
+	return createMarkdownHover(`\`\`\`php\n$${variableName}\n\`\`\``);
+}
 
 export function createHoverHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
@@ -20,38 +60,11 @@ export function createHoverHandler(
 		const word = getWordAtPosition(document.getText(), params.position);
 		if (!word) return null;
 
-		const name = word.startsWith('$') ? word.slice(1) : word;
+		const name = extractSymbolName(word);
 		const def = index.findDefinition(name);
 
-		if (def) {
-			const contents: string[] = [];
-			if (def.signature) {
-				contents.push('```php', def.signature, '```');
-			} else if (def.type) {
-				contents.push('```php', `${def.kind} ${def.name}: ${def.type}`, '```');
-			} else {
-				contents.push('```php', `${def.kind} ${def.name}`, '```');
-			}
-			if (def.container) {
-				contents.push(`Defined in \`${def.container}\``);
-			}
-
-			return {
-				contents: {
-					kind: 'markdown' as MarkupKind,
-					value: contents.join('\n'),
-				},
-			};
-		}
-
-		if (node.kind === 'Variable') {
-			return {
-				contents: {
-					kind: 'markdown' as MarkupKind,
-					value: `\`\`\`php\n$${node.name}\n\`\`\``,
-				},
-			};
-		}
+		if (def) return createDefinitionHover(def);
+		if (node.kind === 'Variable') return createVariableHover(node.name);
 
 		return null;
 	};

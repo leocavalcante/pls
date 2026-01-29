@@ -1,6 +1,6 @@
 import type { CompletionItem, CompletionItemKind, CompletionParams } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { DefinitionIndex, SymbolKind } from '../definition-index';
+import type { DefinitionIndex, IndexedSymbol, SymbolKind } from '../definition-index';
 import { getWordAtPosition } from '../position-utils';
 
 const kindMap: Record<SymbolKind, CompletionItemKind> = {
@@ -13,6 +13,32 @@ const kindMap: Record<SymbolKind, CompletionItemKind> = {
 	parameter: 6,
 };
 
+function extractPrefix(word: string): string {
+	return word.startsWith('$') ? word.slice(1).toLowerCase() : word.toLowerCase();
+}
+
+function createCompletionLabel(symbol: IndexedSymbol): string {
+	return symbol.kind === 'property' ? `$${symbol.name}` : symbol.name;
+}
+
+function createCompletionDetail(symbol: IndexedSymbol): string | undefined {
+	const baseDetail = symbol.signature ?? symbol.type;
+	if (!symbol.container) return baseDetail;
+	return `${baseDetail ?? ''} (${symbol.container})`.trim();
+}
+
+function symbolMatchesPrefix(symbol: IndexedSymbol, prefix: string): boolean {
+	return symbol.name.toLowerCase().startsWith(prefix);
+}
+
+function createCompletionItem(symbol: IndexedSymbol): CompletionItem {
+	return {
+		label: createCompletionLabel(symbol),
+		kind: kindMap[symbol.kind],
+		detail: createCompletionDetail(symbol),
+	};
+}
+
 export function createCompletionHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	index: DefinitionIndex,
@@ -22,25 +48,17 @@ export function createCompletionHandler(
 		if (!document) return [];
 
 		const word = getWordAtPosition(document.getText(), params.position) ?? '';
-		const prefix = word.startsWith('$') ? word.slice(1).toLowerCase() : word.toLowerCase();
+		const prefix = extractPrefix(word);
 
 		const items: CompletionItem[] = [];
 		const seen = new Set<string>();
 
 		for (const symbol of index.getAllSymbols()) {
-			const matchName = symbol.name.toLowerCase();
-			if (matchName.startsWith(prefix) && !seen.has(symbol.name)) {
-				seen.add(symbol.name);
-				const item: CompletionItem = {
-					label: symbol.kind === 'property' ? `$${symbol.name}` : symbol.name,
-					kind: kindMap[symbol.kind],
-					detail: symbol.signature ?? symbol.type,
-				};
-				if (symbol.container) {
-					item.detail = `${item.detail ?? ''} (${symbol.container})`.trim();
-				}
-				items.push(item);
-			}
+			if (!symbolMatchesPrefix(symbol, prefix)) continue;
+			if (seen.has(symbol.name)) continue;
+
+			seen.add(symbol.name);
+			items.push(createCompletionItem(symbol));
 		}
 
 		return items;
