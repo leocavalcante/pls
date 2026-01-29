@@ -129,84 +129,155 @@ export class ReferenceIndex {
 				this.indexTraitDeclaration(uri, statement, refs);
 				break;
 			case 'NamespaceStatement':
-				if (statement.body) {
-					for (const stmt of statement.body) {
-						this.indexStatement(uri, stmt, refs, caller);
-					}
-				}
+				this.indexNamespaceStatement(uri, statement, refs, caller);
 				break;
 			case 'ExpressionStatement':
-				if (statement.expression) {
-					this.indexExpression(uri, statement.expression, refs, caller);
-				}
+				this.indexExpressionStatement(uri, statement, refs, caller);
 				break;
 			case 'ReturnStatement':
-				if (statement.argument) {
-					this.indexExpression(uri, statement.argument, refs, caller);
-				}
+				this.indexReturnStatement(uri, statement, refs, caller);
 				break;
 			case 'IfStatement':
-				this.indexExpression(uri, statement.test, refs, caller);
-				if (statement.consequent) {
-					if (statement.consequent.kind === 'BlockStatement') {
-						for (const stmt of statement.consequent.statements) {
-							this.indexStatement(uri, stmt, refs, caller);
-						}
-					} else {
-						this.indexStatement(uri, statement.consequent, refs, caller);
-					}
-				}
-				if (statement.alternate) {
-					if (statement.alternate.kind === 'BlockStatement') {
-						for (const stmt of statement.alternate.statements) {
-							this.indexStatement(uri, stmt, refs, caller);
-						}
-					} else {
-						this.indexStatement(uri, statement.alternate, refs, caller);
-					}
-				}
+				this.indexIfStatement(uri, statement, refs, caller);
 				break;
 			case 'WhileStatement':
 			case 'DoWhileStatement':
-				this.indexExpression(uri, statement.test, refs, caller);
-				if (statement.body.kind === 'BlockStatement') {
-					for (const stmt of statement.body.statements) {
-						this.indexStatement(uri, stmt, refs, caller);
-					}
-				} else {
-					this.indexStatement(uri, statement.body, refs, caller);
-				}
+				this.indexLoopStatement(uri, statement, refs, caller);
 				break;
 			case 'ForStatement':
-				for (const expr of statement.init) {
-					this.indexExpression(uri, expr, refs, caller);
-				}
-				for (const expr of statement.test) {
-					this.indexExpression(uri, expr, refs, caller);
-				}
-				for (const expr of statement.update) {
-					this.indexExpression(uri, expr, refs, caller);
-				}
-				if (statement.body.kind === 'BlockStatement') {
-					for (const stmt of statement.body.statements) {
-						this.indexStatement(uri, stmt, refs, caller);
-					}
-				} else {
-					this.indexStatement(uri, statement.body, refs, caller);
-				}
+				this.indexForStatement(uri, statement, refs, caller);
 				break;
 			case 'ForeachStatement':
-				this.indexExpression(uri, statement.source, refs, caller);
-				if (statement.key) this.indexExpression(uri, statement.key, refs, caller);
-				if (statement.value) this.indexExpression(uri, statement.value, refs, caller);
-				if (statement.body.kind === 'BlockStatement') {
-					for (const stmt of statement.body.statements) {
-						this.indexStatement(uri, stmt, refs, caller);
-					}
-				} else {
-					this.indexStatement(uri, statement.body, refs, caller);
-				}
+				this.indexForeachStatement(uri, statement, refs, caller);
 				break;
+		}
+	}
+
+	private indexNamespaceStatement(
+		uri: string,
+		statement: Statement,
+		refs: SymbolReference[],
+		caller?: { name: string; kind: 'function' | 'method' },
+	): void {
+		if (statement.kind === 'NamespaceStatement' && statement.body) {
+			for (const stmt of statement.body) {
+				this.indexStatement(uri, stmt, refs, caller);
+			}
+		}
+	}
+
+	private indexExpressionStatement(
+		uri: string,
+		statement: Statement,
+		refs: SymbolReference[],
+		caller?: { name: string; kind: 'function' | 'method' },
+	): void {
+		if (statement.kind === 'ExpressionStatement' && statement.expression) {
+			this.indexExpression(uri, statement.expression, refs, caller);
+		}
+	}
+
+	private indexReturnStatement(
+		uri: string,
+		statement: Statement,
+		refs: SymbolReference[],
+		caller?: { name: string; kind: 'function' | 'method' },
+	): void {
+		if (statement.kind === 'ReturnStatement' && statement.argument) {
+			this.indexExpression(uri, statement.argument, refs, caller);
+		}
+	}
+
+	private indexIfStatement(
+		uri: string,
+		statement: Statement,
+		refs: SymbolReference[],
+		caller?: { name: string; kind: 'function' | 'method' },
+	): void {
+		if (statement.kind !== 'IfStatement') return;
+
+		this.indexExpression(uri, statement.test, refs, caller);
+		if (statement.consequent) {
+			if (statement.consequent.kind === 'BlockStatement') {
+				for (const stmt of statement.consequent.statements) {
+					this.indexStatement(uri, stmt, refs, caller);
+				}
+			} else {
+				this.indexStatement(uri, statement.consequent, refs, caller);
+			}
+		}
+		if (statement.alternate) {
+			if (statement.alternate.kind === 'BlockStatement') {
+				for (const stmt of statement.alternate.statements) {
+					this.indexStatement(uri, stmt, refs, caller);
+				}
+			} else {
+				this.indexStatement(uri, statement.alternate, refs, caller);
+			}
+		}
+	}
+
+	private indexLoopStatement(
+		uri: string,
+		statement: Statement,
+		refs: SymbolReference[],
+		caller?: { name: string; kind: 'function' | 'method' },
+	): void {
+		if (statement.kind !== 'WhileStatement' && statement.kind !== 'DoWhileStatement') return;
+
+		this.indexExpression(uri, statement.test, refs, caller);
+		if (statement.body.kind === 'BlockStatement') {
+			for (const stmt of statement.body.statements) {
+				this.indexStatement(uri, stmt, refs, caller);
+			}
+		} else {
+			this.indexStatement(uri, statement.body, refs, caller);
+		}
+	}
+
+	private indexForStatement(
+		uri: string,
+		statement: Statement,
+		refs: SymbolReference[],
+		caller?: { name: string; kind: 'function' | 'method' },
+	): void {
+		if (statement.kind !== 'ForStatement') return;
+
+		for (const expr of statement.init) {
+			this.indexExpression(uri, expr, refs, caller);
+		}
+		for (const expr of statement.test) {
+			this.indexExpression(uri, expr, refs, caller);
+		}
+		for (const expr of statement.update) {
+			this.indexExpression(uri, expr, refs, caller);
+		}
+		if (statement.body.kind === 'BlockStatement') {
+			for (const stmt of statement.body.statements) {
+				this.indexStatement(uri, stmt, refs, caller);
+			}
+		} else {
+			this.indexStatement(uri, statement.body, refs, caller);
+		}
+	}
+
+	private indexForeachStatement(
+		uri: string,
+		statement: Statement,
+		refs: SymbolReference[],
+		caller?: { name: string; kind: 'function' | 'method' },
+	): void {
+		if (statement.kind !== 'ForeachStatement') return;
+
+		this.indexExpression(uri, statement.source, refs, caller);
+		if (statement.key) this.indexExpression(uri, statement.key, refs, caller);
+		if (statement.value) this.indexExpression(uri, statement.value, refs, caller);
+		if (statement.body.kind === 'BlockStatement') {
+			for (const stmt of statement.body.statements) {
+				this.indexStatement(uri, stmt, refs, caller);
+			}
+		} else {
+			this.indexStatement(uri, statement.body, refs, caller);
 		}
 	}
 
