@@ -1,12 +1,45 @@
 import type {
 	AssignmentExpression,
 	BinaryExpression,
+	CastExpression,
+	CastType,
 	Expression,
 	UnaryExpression,
 } from '../ast/nodes';
 import type { ParserContext } from '../context';
 import { TokenType } from '../tokens';
 import { convertArrayToList, createBinaryExpression } from './utils';
+
+const CAST_TYPES: ReadonlyMap<string, CastType> = new Map([
+	['int', 'int'],
+	['integer', 'int'],
+	['float', 'float'],
+	['double', 'float'],
+	['real', 'float'],
+	['string', 'string'],
+	['bool', 'bool'],
+	['boolean', 'bool'],
+	['array', 'array'],
+	['object', 'object'],
+	['unset', 'unset'],
+	['binary', 'string'],
+]);
+
+const CAST_KEYWORD_TOKENS: ReadonlySet<TokenType> = new Set([TokenType.Array, TokenType.Unset]);
+
+function getCastType(ctx: ParserContext): CastType | null {
+	const next = ctx.peek(1);
+	if (ctx.peek(2).type !== TokenType.CloseParen) {
+		return null;
+	}
+	if (next.type === TokenType.Identifier) {
+		return CAST_TYPES.get(next.value.toLowerCase()) ?? null;
+	}
+	if (CAST_KEYWORD_TOKENS.has(next.type)) {
+		return CAST_TYPES.get(next.value.toLowerCase()) ?? null;
+	}
+	return null;
+}
 
 export function parseAssignmentExpression(
 	ctx: ParserContext,
@@ -16,12 +49,12 @@ export function parseAssignmentExpression(
 	let left = parseTernary();
 
 	if (isAssignmentOperator(ctx)) {
-		// Convert array to list if it appears on left side of assignment
 		if (left.kind === 'ArrayExpression') {
 			left = convertArrayToList(left);
 		}
 
 		const operator = ctx.advance();
+		const byRef = operator.type === TokenType.Assign && ctx.match(TokenType.Ampersand);
 		const right = parseAssignment();
 
 		const opMap: Record<string, AssignmentExpression['operator']> = {
@@ -46,6 +79,7 @@ export function parseAssignmentExpression(
 			operator: opMap[operator.type] ?? '=',
 			left,
 			right,
+			byRef,
 			loc: { start: left.loc.start, end: right.loc.end },
 		};
 	}
@@ -263,6 +297,22 @@ export function parseUnaryExpression(
 	parsePower: () => Expression,
 	parseUnary: () => Expression,
 ): Expression {
+	if (ctx.check(TokenType.OpenParen)) {
+		const castType = getCastType(ctx);
+		if (castType) {
+			const start = ctx.advance().start;
+			ctx.advance();
+			ctx.advance();
+			const argument = parseUnary();
+			return {
+				kind: 'CastExpression',
+				type: castType,
+				argument,
+				loc: { start, end: argument.loc.end },
+			} satisfies CastExpression;
+		}
+	}
+
 	if (
 		ctx.match(TokenType.Not) ||
 		ctx.match(TokenType.Tilde) ||

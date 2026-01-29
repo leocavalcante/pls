@@ -493,6 +493,7 @@ export interface AssignmentExpression extends BaseNode {
 	operator: AssignmentOperator;
 	left: Expression;
 	right: Expression;
+	byRef: boolean;
 }
 
 export interface CallExpression extends BaseNode {
