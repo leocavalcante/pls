@@ -46,132 +46,28 @@ export function createCodeActionHandler(
 
 		const word = getWordAtPosition(document.getText(), params.range.start);
 		if (word) {
-			const node = findNodeAtPosition(ast, params.range.start);
-
-			if (node?.kind === 'Identifier') {
-				const classNameAction = checkClassNameMismatch(params.textDocument.uri, ast, node);
-				if (classNameAction) {
-					actions.push(classNameAction);
-					return actions;
-				}
-
-				if (isClassDeclarationName(ast, node)) {
-					return actions;
-				}
-
-				const isPropertyName = isPropertyAccessProperty(ast, node);
-
-				if (!isPropertyName) {
-					if (word.startsWith('\\')) {
-						return actions;
-					}
-
-					if (PHP_BUILTINS.includes(word)) {
-						return actions;
-					}
-
-					const alreadyImported = ast.statements.some(
-						(stmt) =>
-							stmt.kind === 'UseStatement' &&
-							stmt.type === 'class' &&
-							stmt.items.some((item) => item.name.name === word),
-					);
-
-					if (alreadyImported) {
-						return actions;
-					}
-
-					const definition = index.findDefinition(word, 'class');
-					if (!definition) {
-						let insertLine = 0;
-						let insertChar = 0;
-
-						const namespaceStmt = ast.statements.find((s) => s.kind === 'NamespaceStatement');
-						if (namespaceStmt) {
-							insertLine = namespaceStmt.loc.end.line - 1;
-							insertChar = 0;
-						} else {
-							insertLine = 1;
-							insertChar = 0;
-						}
-
-						actions.push({
-							title: `Import ${word}`,
-							kind: CodeActionKind.QuickFix,
-							edit: {
-								changes: {
-									[params.textDocument.uri]: [
-										{
-											range: {
-												start: { line: insertLine, character: insertChar },
-												end: { line: insertLine, character: insertChar },
-											},
-											newText: `use ${word};\n`,
-										},
-									],
-								},
-							},
-						});
-					}
-				}
+			const importActions = checkImportActions(
+				params.textDocument.uri,
+				ast,
+				word,
+				params.range.start,
+				index,
+			);
+			if (importActions.shouldReturn) {
+				return importActions.actions;
 			}
+			actions.push(...importActions.actions);
 		}
 
-		const missingPropertyAction = checkMissingProperty(
-			params.textDocument.uri,
-			ast,
-			params.range.start,
-		);
-		if (missingPropertyAction) {
-			actions.push(missingPropertyAction);
-		}
-
-		const missingConstructorAction = checkMissingConstructor(
-			params.textDocument.uri,
-			ast,
-			params.range.start,
-		);
-		if (missingConstructorAction) {
-			actions.push(missingConstructorAction);
-		}
-
-		const missingReturnTypeAction = checkMissingReturnType(
-			params.textDocument.uri,
-			ast,
-			params.range.start,
-		);
-		if (missingReturnTypeAction) {
-			actions.push(missingReturnTypeAction);
-		}
-
-		const interfaceActions = checkMissingInterfaceMethods(
+		collectQuickFixActions(
 			params.textDocument.uri,
 			ast,
 			params.range.start,
 			index,
 			getAst,
+			actions,
 		);
-		actions.push(...interfaceActions);
-
-		const extractMethodAction = checkExtractMethod(
-			document,
-			params.textDocument.uri,
-			ast,
-			params.range,
-			index,
-		);
-		if (extractMethodAction) {
-			actions.push(extractMethodAction);
-		}
-
-		const gettersSettersAction = checkGenerateGettersSetters(
-			params.textDocument.uri,
-			ast,
-			params.range.start,
-		);
-		if (gettersSettersAction) {
-			actions.push(gettersSettersAction);
-		}
+		collectRefactoringActions(document, params.textDocument.uri, ast, params.range, index, actions);
 
 		const organizeImportsAction = checkOrganizeImports(
 			params.textDocument.uri,
@@ -184,6 +80,138 @@ export function createCodeActionHandler(
 
 		return actions;
 	};
+}
+
+function checkImportActions(
+	uri: string,
+	ast: Program,
+	word: string,
+	position: { line: number; character: number },
+	index: DefinitionIndex,
+): { shouldReturn: boolean; actions: CodeAction[] } {
+	const node = findNodeAtPosition(ast, position);
+	if (node?.kind !== 'Identifier') {
+		return { shouldReturn: false, actions: [] };
+	}
+
+	const classNameAction = checkClassNameMismatch(uri, ast, node);
+	if (classNameAction) {
+		return { shouldReturn: true, actions: [classNameAction] };
+	}
+
+	if (isClassDeclarationName(ast, node)) {
+		return { shouldReturn: true, actions: [] };
+	}
+
+	const isPropertyName = isPropertyAccessProperty(ast, node);
+	if (isPropertyName) {
+		return { shouldReturn: false, actions: [] };
+	}
+
+	if (word.startsWith('\\')) {
+		return { shouldReturn: true, actions: [] };
+	}
+
+	if (PHP_BUILTINS.includes(word)) {
+		return { shouldReturn: true, actions: [] };
+	}
+
+	const alreadyImported = ast.statements.some(
+		(stmt) =>
+			stmt.kind === 'UseStatement' &&
+			stmt.type === 'class' &&
+			stmt.items.some((item) => item.name.name === word),
+	);
+
+	if (alreadyImported) {
+		return { shouldReturn: true, actions: [] };
+	}
+
+	const definition = index.findDefinition(word, 'class');
+	if (definition) {
+		return { shouldReturn: false, actions: [] };
+	}
+
+	const importAction = createImportAction(uri, ast, word);
+	return { shouldReturn: false, actions: [importAction] };
+}
+
+function createImportAction(uri: string, ast: Program, word: string): CodeAction {
+	let insertLine = 0;
+	let insertChar = 0;
+
+	const namespaceStmt = ast.statements.find((s) => s.kind === 'NamespaceStatement');
+	if (namespaceStmt) {
+		insertLine = namespaceStmt.loc.end.line - 1;
+		insertChar = 0;
+	} else {
+		insertLine = 1;
+		insertChar = 0;
+	}
+
+	return {
+		title: `Import ${word}`,
+		kind: CodeActionKind.QuickFix,
+		edit: {
+			changes: {
+				[uri]: [
+					{
+						range: {
+							start: { line: insertLine, character: insertChar },
+							end: { line: insertLine, character: insertChar },
+						},
+						newText: `use ${word};\n`,
+					},
+				],
+			},
+		},
+	};
+}
+
+function collectQuickFixActions(
+	uri: string,
+	ast: Program,
+	position: { line: number; character: number },
+	index: DefinitionIndex,
+	getAst: (uri: string) => Program | null,
+	actions: CodeAction[],
+): void {
+	const missingPropertyAction = checkMissingProperty(uri, ast, position);
+	if (missingPropertyAction) {
+		actions.push(missingPropertyAction);
+	}
+
+	const missingConstructorAction = checkMissingConstructor(uri, ast, position);
+	if (missingConstructorAction) {
+		actions.push(missingConstructorAction);
+	}
+
+	const missingReturnTypeAction = checkMissingReturnType(uri, ast, position);
+	if (missingReturnTypeAction) {
+		actions.push(missingReturnTypeAction);
+	}
+
+	const interfaceActions = checkMissingInterfaceMethods(uri, ast, position, index, getAst);
+	actions.push(...interfaceActions);
+}
+
+function collectRefactoringActions(
+	document: TextDocument,
+	uri: string,
+	ast: Program,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+	index: DefinitionIndex,
+	actions: CodeAction[],
+): void {
+	const extractMethodAction = checkExtractMethod(document, uri, ast, range, index);
+	if (extractMethodAction) {
+		actions.push(extractMethodAction);
+	}
+
+	const gettersSettersAction = checkGenerateGettersSetters(uri, ast, range.start);
+	if (gettersSettersAction) {
+		actions.push(gettersSettersAction);
+	}
 }
 
 function checkClassNameMismatch(uri: string, ast: Program, cursorNode: Node): CodeAction | null {
@@ -238,15 +266,22 @@ function isClassDeclarationName(ast: Program, node: Node): boolean {
 
 function isPropertyAccessProperty(ast: Program, node: Node): boolean {
 	if (node.kind !== 'Identifier') return false;
+
 	for (const stmt of ast.statements) {
 		if (stmt.kind === 'ClassDeclaration') {
-			const classDecl = stmt as ClassDeclaration;
-			for (const member of classDecl.body.members) {
-				if (member.kind === 'MethodDeclaration' && member.body) {
-					if (isPropertyInStatements(member.body.statements, node)) {
-						return true;
-					}
-				}
+			if (checkClassForPropertyAccess(stmt, node)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+function checkClassForPropertyAccess(classDecl: ClassDeclaration, node: Node): boolean {
+	for (const member of classDecl.body.members) {
+		if (member.kind === 'MethodDeclaration' && member.body) {
+			if (isPropertyInStatements(member.body.statements, node)) {
+				return true;
 			}
 		}
 	}
@@ -364,13 +399,21 @@ function findParentPropertyAccess(
 ): PropertyAccessExpression | null {
 	for (const stmt of ast.statements) {
 		if (stmt.kind === 'ClassDeclaration') {
-			const classDecl = stmt as ClassDeclaration;
-			for (const member of classDecl.body.members) {
-				if (member.kind === 'MethodDeclaration' && member.body) {
-					const result = findPropertyAccessInStatements(member.body.statements, position);
-					if (result) return result;
-				}
-			}
+			const result = findPropertyAccessInClass(stmt, position);
+			if (result) return result;
+		}
+	}
+	return null;
+}
+
+function findPropertyAccessInClass(
+	classDecl: ClassDeclaration,
+	position: { line: number; character: number },
+): PropertyAccessExpression | null {
+	for (const member of classDecl.body.members) {
+		if (member.kind === 'MethodDeclaration' && member.body) {
+			const result = findPropertyAccessInStatements(member.body.statements, position);
+			if (result) return result;
 		}
 	}
 	return null;
@@ -572,13 +615,23 @@ function findFunctionOrMethodAtPosition(
 			}
 		}
 		if (stmt.kind === 'ClassDeclaration') {
-			const classDecl = stmt as ClassDeclaration;
-			for (const member of classDecl.body.members) {
-				if (member.kind === 'MethodDeclaration') {
-					if (containsPosition(member, position.line + 1, position.character + 1)) {
-						return member;
-					}
-				}
+			const method = findMethodInClass(stmt, position);
+			if (method) {
+				return method;
+			}
+		}
+	}
+	return null;
+}
+
+function findMethodInClass(
+	classDecl: ClassDeclaration,
+	position: { line: number; character: number },
+): MethodDeclaration | null {
+	for (const member of classDecl.body.members) {
+		if (member.kind === 'MethodDeclaration') {
+			if (containsPosition(member, position.line + 1, position.character + 1)) {
+				return member;
 			}
 		}
 	}
@@ -587,71 +640,107 @@ function findFunctionOrMethodAtPosition(
 
 function hasReturnStatementWithValue(statements: Statement[]): boolean {
 	for (const stmt of statements) {
-		if (stmt.kind === 'ReturnStatement') {
-			const returnStmt = stmt as ReturnStatement;
-			if (returnStmt.argument !== null) {
-				return true;
-			}
-		}
-		if (stmt.kind === 'BlockStatement') {
-			if (hasReturnStatementWithValue(stmt.statements)) {
-				return true;
-			}
-		}
-		if (stmt.kind === 'IfStatement') {
-			if (stmt.consequent.kind === 'BlockStatement') {
-				if (hasReturnStatementWithValue(stmt.consequent.statements)) {
-					return true;
-				}
-			}
-			if (stmt.alternate) {
-				if (stmt.alternate.kind === 'BlockStatement') {
-					if (hasReturnStatementWithValue(stmt.alternate.statements)) {
-						return true;
-					}
-				} else if (stmt.alternate.kind === 'ReturnStatement') {
-					const returnStmt = stmt.alternate as ReturnStatement;
-					if (returnStmt.argument !== null) {
-						return true;
-					}
-				}
-			}
-		}
-		if (
-			stmt.kind === 'WhileStatement' ||
-			stmt.kind === 'DoWhileStatement' ||
-			stmt.kind === 'ForStatement' ||
-			stmt.kind === 'ForeachStatement'
-		) {
-			if (stmt.body.kind === 'BlockStatement') {
-				if (hasReturnStatementWithValue(stmt.body.statements)) {
-					return true;
-				}
-			}
-		}
-		if (stmt.kind === 'SwitchStatement') {
-			for (const caseClause of stmt.cases) {
-				if (hasReturnStatementWithValue(caseClause.consequent)) {
-					return true;
-				}
-			}
-		}
-		if (stmt.kind === 'TryStatement') {
-			if (hasReturnStatementWithValue(stmt.block.statements)) {
-				return true;
-			}
-			for (const catchClause of stmt.catches) {
-				if (hasReturnStatementWithValue(catchClause.body.statements)) {
-					return true;
-				}
-			}
-			if (stmt.finalizer) {
-				if (hasReturnStatementWithValue(stmt.finalizer.statements)) {
-					return true;
-				}
-			}
+		if (checkStatementForReturnValue(stmt)) {
+			return true;
 		}
 	}
+	return false;
+}
+
+function checkStatementForReturnValue(stmt: Statement): boolean {
+	if (stmt.kind === 'ReturnStatement') {
+		return stmt.argument !== null;
+	}
+	if (stmt.kind === 'BlockStatement') {
+		return hasReturnStatementWithValue(stmt.statements);
+	}
+	if (stmt.kind === 'IfStatement') {
+		return checkIfStatementForReturnValue(stmt);
+	}
+	if (
+		stmt.kind === 'WhileStatement' ||
+		stmt.kind === 'DoWhileStatement' ||
+		stmt.kind === 'ForStatement' ||
+		stmt.kind === 'ForeachStatement'
+	) {
+		return checkLoopStatementForReturnValue(stmt);
+	}
+	if (stmt.kind === 'SwitchStatement') {
+		return checkSwitchStatementForReturnValue(stmt);
+	}
+	if (stmt.kind === 'TryStatement') {
+		return checkTryStatementForReturnValue(stmt);
+	}
+	return false;
+}
+
+function checkIfStatementForReturnValue(stmt: Statement): boolean {
+	if (stmt.kind !== 'IfStatement') return false;
+
+	if (stmt.consequent.kind === 'BlockStatement') {
+		if (hasReturnStatementWithValue(stmt.consequent.statements)) {
+			return true;
+		}
+	}
+
+	if (stmt.alternate) {
+		if (stmt.alternate.kind === 'BlockStatement') {
+			return hasReturnStatementWithValue(stmt.alternate.statements);
+		}
+		if (stmt.alternate.kind === 'ReturnStatement') {
+			return stmt.alternate.argument !== null;
+		}
+	}
+
+	return false;
+}
+
+function checkLoopStatementForReturnValue(stmt: Statement): boolean {
+	if (
+		stmt.kind !== 'WhileStatement' &&
+		stmt.kind !== 'DoWhileStatement' &&
+		stmt.kind !== 'ForStatement' &&
+		stmt.kind !== 'ForeachStatement'
+	) {
+		return false;
+	}
+
+	if (stmt.body.kind === 'BlockStatement') {
+		return hasReturnStatementWithValue(stmt.body.statements);
+	}
+
+	return false;
+}
+
+function checkSwitchStatementForReturnValue(stmt: Statement): boolean {
+	if (stmt.kind !== 'SwitchStatement') return false;
+
+	for (const caseClause of stmt.cases) {
+		if (hasReturnStatementWithValue(caseClause.consequent)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function checkTryStatementForReturnValue(stmt: Statement): boolean {
+	if (stmt.kind !== 'TryStatement') return false;
+
+	if (hasReturnStatementWithValue(stmt.block.statements)) {
+		return true;
+	}
+
+	for (const catchClause of stmt.catches) {
+		if (hasReturnStatementWithValue(catchClause.body.statements)) {
+			return true;
+		}
+	}
+
+	if (stmt.finalizer && hasReturnStatementWithValue(stmt.finalizer.statements)) {
+		return true;
+	}
+
 	return false;
 }
 
@@ -875,18 +964,26 @@ function findMethodContainingRange(
 ): MethodDeclaration | null {
 	for (const stmt of ast.statements) {
 		if (stmt.kind === 'ClassDeclaration') {
-			const classDecl = stmt as ClassDeclaration;
-			for (const member of classDecl.body.members) {
-				if (member.kind === 'MethodDeclaration') {
-					const method = member as MethodDeclaration;
-					if (
-						method.body &&
-						method.loc.start.line - 1 <= range.start.line &&
-						method.loc.end.line - 1 >= range.end.line
-					) {
-						return method;
-					}
-				}
+			const method = findMethodInClassByRange(stmt, range);
+			if (method) return method;
+		}
+	}
+	return null;
+}
+
+function findMethodInClassByRange(
+	classDecl: ClassDeclaration,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+): MethodDeclaration | null {
+	for (const member of classDecl.body.members) {
+		if (member.kind === 'MethodDeclaration') {
+			const method = member as MethodDeclaration;
+			if (
+				method.body &&
+				method.loc.start.line - 1 <= range.start.line &&
+				method.loc.end.line - 1 >= range.end.line
+			) {
+				return method;
 			}
 		}
 	}
@@ -925,31 +1022,44 @@ function findStatementsAfterRange(
 
 function containsReturnStatement(statements: Statement[]): boolean {
 	for (const stmt of statements) {
-		if (stmt.kind === 'ReturnStatement') {
+		if (checkStatementForReturn(stmt)) {
 			return true;
 		}
-		if (stmt.kind === 'BlockStatement') {
-			if (containsReturnStatement(stmt.statements)) {
-				return true;
-			}
-		}
-		if (stmt.kind === 'IfStatement') {
-			if (stmt.consequent.kind === 'BlockStatement') {
-				if (containsReturnStatement(stmt.consequent.statements)) {
-					return true;
-				}
-			}
-			if (stmt.alternate) {
-				if (stmt.alternate.kind === 'BlockStatement') {
-					if (containsReturnStatement(stmt.alternate.statements)) {
-						return true;
-					}
-				} else if (stmt.alternate.kind === 'ReturnStatement') {
-					return true;
-				}
-			}
+	}
+	return false;
+}
+
+function checkStatementForReturn(stmt: Statement): boolean {
+	if (stmt.kind === 'ReturnStatement') {
+		return true;
+	}
+	if (stmt.kind === 'BlockStatement') {
+		return containsReturnStatement(stmt.statements);
+	}
+	if (stmt.kind === 'IfStatement') {
+		return checkIfStatementForReturn(stmt);
+	}
+	return false;
+}
+
+function checkIfStatementForReturn(stmt: Statement): boolean {
+	if (stmt.kind !== 'IfStatement') return false;
+
+	if (stmt.consequent.kind === 'BlockStatement') {
+		if (containsReturnStatement(stmt.consequent.statements)) {
+			return true;
 		}
 	}
+
+	if (stmt.alternate) {
+		if (stmt.alternate.kind === 'BlockStatement') {
+			return containsReturnStatement(stmt.alternate.statements);
+		}
+		if (stmt.alternate.kind === 'ReturnStatement') {
+			return true;
+		}
+	}
+
 	return false;
 }
 
@@ -980,102 +1090,172 @@ function collectDeclaredVariables(stmt: Statement, vars: Set<string>): void {
 function collectUsedVariables(stmt: Statement, vars: Set<string>): void {
 	if (stmt.kind === 'ExpressionStatement') {
 		collectUsedVariablesInExpression(stmt.expression, vars);
+		return;
 	}
 	if (stmt.kind === 'EchoStatement') {
 		for (const expr of stmt.expressions) {
 			collectUsedVariablesInExpression(expr, vars);
 		}
+		return;
 	}
 	if (stmt.kind === 'ReturnStatement' && stmt.argument) {
 		collectUsedVariablesInExpression(stmt.argument, vars);
+		return;
 	}
 	if (stmt.kind === 'BlockStatement') {
 		for (const s of stmt.statements) {
 			collectUsedVariables(s, vars);
 		}
+		return;
 	}
 	if (stmt.kind === 'IfStatement') {
-		collectUsedVariablesInExpression(stmt.test, vars);
-		if (stmt.consequent.kind === 'BlockStatement') {
-			collectUsedVariables(stmt.consequent, vars);
-		}
-		if (stmt.alternate) {
-			collectUsedVariables(stmt.alternate, vars);
-		}
+		collectVariablesFromIfStatement(stmt, vars);
+		return;
 	}
 	if (stmt.kind === 'WhileStatement' || stmt.kind === 'DoWhileStatement') {
-		collectUsedVariablesInExpression(stmt.test, vars);
-		if (stmt.body.kind === 'BlockStatement') {
-			collectUsedVariables(stmt.body, vars);
-		}
+		collectVariablesFromLoopStatement(stmt, vars);
+		return;
 	}
 	if (stmt.kind === 'ForeachStatement') {
-		collectUsedVariablesInExpression(stmt.source, vars);
-		if (stmt.body.kind === 'BlockStatement') {
-			collectUsedVariables(stmt.body, vars);
-		}
+		collectVariablesFromForeachStatement(stmt, vars);
+	}
+}
+
+function collectVariablesFromIfStatement(stmt: Statement, vars: Set<string>): void {
+	if (stmt.kind !== 'IfStatement') return;
+
+	collectUsedVariablesInExpression(stmt.test, vars);
+	if (stmt.consequent.kind === 'BlockStatement') {
+		collectUsedVariables(stmt.consequent, vars);
+	}
+	if (stmt.alternate) {
+		collectUsedVariables(stmt.alternate, vars);
+	}
+}
+
+function collectVariablesFromLoopStatement(stmt: Statement, vars: Set<string>): void {
+	if (stmt.kind !== 'WhileStatement' && stmt.kind !== 'DoWhileStatement') return;
+
+	collectUsedVariablesInExpression(stmt.test, vars);
+	if (stmt.body.kind === 'BlockStatement') {
+		collectUsedVariables(stmt.body, vars);
+	}
+}
+
+function collectVariablesFromForeachStatement(stmt: Statement, vars: Set<string>): void {
+	if (stmt.kind !== 'ForeachStatement') return;
+
+	collectUsedVariablesInExpression(stmt.source, vars);
+	if (stmt.body.kind === 'BlockStatement') {
+		collectUsedVariables(stmt.body, vars);
 	}
 }
 
 function collectUsedVariablesInExpression(expr: Expression, vars: Set<string>): void {
 	if (expr.kind === 'Variable') {
 		vars.add(expr.name);
+		return;
 	}
 	if (expr.kind === 'BinaryExpression') {
 		collectUsedVariablesInExpression(expr.left, vars);
 		collectUsedVariablesInExpression(expr.right, vars);
+		return;
 	}
 	if (expr.kind === 'UnaryExpression') {
 		collectUsedVariablesInExpression(expr.argument, vars);
+		return;
 	}
 	if (expr.kind === 'AssignmentExpression') {
-		collectUsedVariablesInExpression(expr.right, vars);
-		if (expr.left.kind !== 'Variable') {
-			collectUsedVariablesInExpression(expr.left, vars);
-		}
+		collectVariablesFromAssignment(expr, vars);
+		return;
 	}
 	if (expr.kind === 'CallExpression') {
-		collectUsedVariablesInExpression(expr.callee, vars);
-		for (const arg of expr.arguments) {
-			collectUsedVariablesInExpression(arg.value, vars);
-		}
+		collectVariablesFromCallExpression(expr, vars);
+		return;
 	}
 	if (expr.kind === 'MethodCallExpression') {
-		collectUsedVariablesInExpression(expr.object, vars);
-		for (const arg of expr.arguments) {
-			collectUsedVariablesInExpression(arg.value, vars);
-		}
+		collectVariablesFromMethodCall(expr, vars);
+		return;
 	}
 	if (expr.kind === 'PropertyAccessExpression') {
 		collectUsedVariablesInExpression(expr.object, vars);
+		return;
 	}
 	if (expr.kind === 'ArrayExpression') {
-		for (const item of expr.items) {
-			if (item) {
-				if (item.key) {
-					collectUsedVariablesInExpression(item.key, vars);
-				}
-				collectUsedVariablesInExpression(item.value, vars);
-			}
-		}
+		collectVariablesFromArray(expr, vars);
+		return;
 	}
 	if (expr.kind === 'ArrayAccessExpression') {
-		collectUsedVariablesInExpression(expr.array, vars);
-		if (expr.index) {
-			collectUsedVariablesInExpression(expr.index, vars);
-		}
+		collectVariablesFromArrayAccess(expr, vars);
+		return;
 	}
 	if (expr.kind === 'TernaryExpression') {
-		collectUsedVariablesInExpression(expr.test, vars);
-		if (expr.consequent) {
-			collectUsedVariablesInExpression(expr.consequent, vars);
-		}
-		collectUsedVariablesInExpression(expr.alternate, vars);
+		collectVariablesFromTernary(expr, vars);
+		return;
 	}
 	if (expr.kind === 'NullCoalesceExpression') {
 		collectUsedVariablesInExpression(expr.left, vars);
 		collectUsedVariablesInExpression(expr.right, vars);
 	}
+}
+
+function collectVariablesFromAssignment(expr: Expression, vars: Set<string>): void {
+	if (expr.kind !== 'AssignmentExpression') return;
+
+	collectUsedVariablesInExpression(expr.right, vars);
+	if (expr.left.kind !== 'Variable') {
+		collectUsedVariablesInExpression(expr.left, vars);
+	}
+}
+
+function collectVariablesFromCallExpression(expr: Expression, vars: Set<string>): void {
+	if (expr.kind !== 'CallExpression') return;
+
+	collectUsedVariablesInExpression(expr.callee, vars);
+	for (const arg of expr.arguments) {
+		collectUsedVariablesInExpression(arg.value, vars);
+	}
+}
+
+function collectVariablesFromMethodCall(expr: Expression, vars: Set<string>): void {
+	if (expr.kind !== 'MethodCallExpression') return;
+
+	collectUsedVariablesInExpression(expr.object, vars);
+	for (const arg of expr.arguments) {
+		collectUsedVariablesInExpression(arg.value, vars);
+	}
+}
+
+function collectVariablesFromArray(expr: Expression, vars: Set<string>): void {
+	if (expr.kind !== 'ArrayExpression') return;
+
+	for (const item of expr.items) {
+		if (item) {
+			if (item.key) {
+				collectUsedVariablesInExpression(item.key, vars);
+			}
+			collectUsedVariablesInExpression(item.value, vars);
+		}
+	}
+}
+
+function collectVariablesFromArrayAccess(expr: Expression, vars: Set<string>): void {
+	if (expr.kind !== 'ArrayAccessExpression') return;
+
+	collectUsedVariablesInExpression(expr.array, vars);
+	if (expr.index) {
+		collectUsedVariablesInExpression(expr.index, vars);
+	}
+}
+
+function collectVariablesFromTernary(expr: Expression, vars: Set<string>): void {
+	if (expr.kind !== 'TernaryExpression') return;
+
+	collectUsedVariablesInExpression(expr.test, vars);
+	if (expr.consequent) {
+		collectUsedVariablesInExpression(expr.consequent, vars);
+	}
+	collectUsedVariablesInExpression(expr.alternate, vars);
 }
 
 function inferVariableType(
@@ -1126,70 +1306,12 @@ function checkOrganizeImports(
 		}
 	}
 
-	interface UseItemData {
-		name: string;
-		alias: string | null;
-		type: 'class' | 'function' | 'const';
-	}
+	const items = collectUseItems(useStatements);
+	const uniqueItems = deduplicateUseItems(items);
+	const sortedItems = sortUseItems(uniqueItems);
 
-	const items: UseItemData[] = [];
-	for (const useStmt of useStatements) {
-		for (const item of useStmt.items) {
-			items.push({
-				name: item.name.name,
-				alias: item.alias ? item.alias.name : null,
-				type: useStmt.type === 'class' ? 'class' : useStmt.type,
-			});
-		}
-	}
-
-	const uniqueItems: UseItemData[] = [];
-	const seen = new Set<string>();
-	for (const item of items) {
-		const key = `${item.type}:${item.name}`;
-		if (!seen.has(key)) {
-			seen.add(key);
-			uniqueItems.push(item);
-		}
-	}
-
-	const classItems = uniqueItems
-		.filter((item) => item.type === 'class')
-		.sort((a, b) => a.name.localeCompare(b.name));
-	const constItems = uniqueItems
-		.filter((item) => item.type === 'const')
-		.sort((a, b) => a.name.localeCompare(b.name));
-	const functionItems = uniqueItems
-		.filter((item) => item.type === 'function')
-		.sort((a, b) => a.name.localeCompare(b.name));
-
-	const sortedItems: UseItemData[] = [...classItems];
-	if (constItems.length > 0) {
-		sortedItems.push(...constItems);
-	}
-	if (functionItems.length > 0) {
-		sortedItems.push(...functionItems);
-	}
-
-	let originalText = '';
-	for (const item of items) {
-		const typePrefix = item.type === 'class' ? '' : `${item.type} `;
-		const alias = item.alias ? ` as ${item.alias}` : '';
-		originalText += `use ${typePrefix}${item.name}${alias};\n`;
-	}
-
-	let newText = '';
-	let lastType: 'class' | 'function' | 'const' | null = null;
-	for (const item of sortedItems) {
-		if (lastType !== null && item.type !== lastType) {
-			newText += '\n';
-		}
-		lastType = item.type;
-
-		const typePrefix = item.type === 'class' ? '' : `${item.type} `;
-		const alias = item.alias ? ` as ${item.alias}` : '';
-		newText += `use ${typePrefix}${item.name}${alias};\n`;
-	}
+	const originalText = formatUseItems(items);
+	const newText = formatSortedUseItems(sortedItems);
 
 	if (originalText === newText) {
 		return null;
@@ -1218,6 +1340,86 @@ function checkOrganizeImports(
 			},
 		},
 	};
+}
+
+interface UseItemData {
+	name: string;
+	alias: string | null;
+	type: 'class' | 'function' | 'const';
+}
+
+function collectUseItems(useStatements: UseStatement[]): UseItemData[] {
+	const items: UseItemData[] = [];
+	for (const useStmt of useStatements) {
+		for (const item of useStmt.items) {
+			items.push({
+				name: item.name.name,
+				alias: item.alias ? item.alias.name : null,
+				type: useStmt.type === 'class' ? 'class' : useStmt.type,
+			});
+		}
+	}
+	return items;
+}
+
+function deduplicateUseItems(items: UseItemData[]): UseItemData[] {
+	const uniqueItems: UseItemData[] = [];
+	const seen = new Set<string>();
+	for (const item of items) {
+		const key = `${item.type}:${item.name}`;
+		if (!seen.has(key)) {
+			seen.add(key);
+			uniqueItems.push(item);
+		}
+	}
+	return uniqueItems;
+}
+
+function sortUseItems(items: UseItemData[]): UseItemData[] {
+	const classItems = items
+		.filter((item) => item.type === 'class')
+		.sort((a, b) => a.name.localeCompare(b.name));
+	const constItems = items
+		.filter((item) => item.type === 'const')
+		.sort((a, b) => a.name.localeCompare(b.name));
+	const functionItems = items
+		.filter((item) => item.type === 'function')
+		.sort((a, b) => a.name.localeCompare(b.name));
+
+	const sortedItems: UseItemData[] = [...classItems];
+	if (constItems.length > 0) {
+		sortedItems.push(...constItems);
+	}
+	if (functionItems.length > 0) {
+		sortedItems.push(...functionItems);
+	}
+	return sortedItems;
+}
+
+function formatUseItems(items: UseItemData[]): string {
+	let text = '';
+	for (const item of items) {
+		const typePrefix = item.type === 'class' ? '' : `${item.type} `;
+		const alias = item.alias ? ` as ${item.alias}` : '';
+		text += `use ${typePrefix}${item.name}${alias};\n`;
+	}
+	return text;
+}
+
+function formatSortedUseItems(sortedItems: UseItemData[]): string {
+	let text = '';
+	let lastType: 'class' | 'function' | 'const' | null = null;
+	for (const item of sortedItems) {
+		if (lastType !== null && item.type !== lastType) {
+			text += '\n';
+		}
+		lastType = item.type;
+
+		const typePrefix = item.type === 'class' ? '' : `${item.type} `;
+		const alias = item.alias ? ` as ${item.alias}` : '';
+		text += `use ${typePrefix}${item.name}${alias};\n`;
+	}
+	return text;
 }
 
 function checkGenerateGettersSetters(
