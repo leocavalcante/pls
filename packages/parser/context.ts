@@ -140,6 +140,7 @@ export class ParserContext {
 			TokenType.Clone,
 			TokenType.Instanceof,
 			TokenType.Enum,
+			TokenType.Namespace,
 		];
 		return keywordsAsIdentifiers.includes(this.current().type);
 	}
