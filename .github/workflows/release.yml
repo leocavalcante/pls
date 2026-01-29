@@ -47,7 +47,21 @@ jobs:
           path: packages/server/dist/${{ matrix.name }}
 
   build-vscode:
+    needs: build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - platform: linux-x64
+            binary: pls-linux-x64
+          - platform: linux-arm64
+            binary: pls-linux-arm64
+          - platform: darwin-x64
+            binary: pls-darwin-x64
+          - platform: darwin-arm64
+            binary: pls-darwin-arm64
+          - platform: win32-x64
+            binary: pls-windows-x64.exe
     steps:
       - uses: actions/checkout@v4
 
@@ -58,20 +72,46 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Download server binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.binary }}
+          path: packages/vscode/server
+
+      - name: Rename binary to platform convention
+        run: |
+          cd packages/vscode/server
+          if [[ "${{ matrix.platform }}" == "win32-x64" ]]; then
+            mv ${{ matrix.binary }} pls-win32-x64.exe
+          elif [[ "${{ matrix.platform }}" == "darwin-x64" ]]; then
+            mv ${{ matrix.binary }} pls-darwin-x64
+            chmod +x pls-darwin-x64
+          elif [[ "${{ matrix.platform }}" == "darwin-arm64" ]]; then
+            mv ${{ matrix.binary }} pls-darwin-arm64
+            chmod +x pls-darwin-arm64
+          elif [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+            mv ${{ matrix.binary }} pls-linux-x64
+            chmod +x pls-linux-x64
+          elif [[ "${{ matrix.platform }}" == "linux-arm64" ]]; then
+            mv ${{ matrix.binary }} pls-linux-arm64
+            chmod +x pls-linux-arm64
+          fi
+          ls -la
+
       - name: Build VS Code extension
         run: |
           cd packages/vscode
           bun run build
 
-      - name: Package VS Code extension
+      - name: Package VS Code extension for ${{ matrix.platform }}
         run: |
           cd packages/vscode
-          bunx @vscode/vsce package --no-dependencies
+          bunx @vscode/vsce package --no-dependencies --target ${{ matrix.platform }}
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pls-vscode.vsix
+          name: pls-vscode-${{ matrix.platform }}.vsix
           path: packages/vscode/*.vsix
 
   release:

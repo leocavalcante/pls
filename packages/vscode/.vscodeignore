@@ -4,3 +4,5 @@
 !package.json
 !dist/**
 !dist/extension.js
+!server/**
+!server/pls-*
