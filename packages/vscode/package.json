@@ -1,13 +1,23 @@
 {
-	"name": "@pls/vscode",
+	"name": "pls-vscode",
 	"displayName": "PLS - PHP Language Server",
-	"description": "PHP Language Server extension for VS Code",
+	"description": "PHP Language Server extension for VS Code - provides go to definition, find references, completions, and more",
 	"version": "0.1.0",
 	"publisher": "leocavalcante",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/leocavalcante/pls"
+	},
+	"homepage": "https://github.com/leocavalcante/pls",
+	"bugs": {
+		"url": "https://github.com/leocavalcante/pls/issues"
+	},
 	"engines": {
 		"vscode": "^1.85.0"
 	},
-	"categories": ["Programming Languages"],
+	"categories": ["Programming Languages", "Linters"],
+	"keywords": ["php", "language server", "lsp", "intellisense", "autocomplete"],
 	"activationEvents": ["onLanguage:php"],
 	"main": "./dist/extension.js",
 	"contributes": {
