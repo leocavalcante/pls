@@ -518,16 +518,12 @@ function tryParseSpecialIdentifier(ctx: ParserContext): Expression | null {
 	return ident;
 }
 
-export function parsePrimaryExpression(
+function tryParseFunction(
 	ctx: ParserContext,
 	parseExpression: () => Expression,
 	expr: ExpressionParser,
 	getStmt?: () => { parseBlockStatement(): import('../ast/nodes').BlockStatement },
-): Expression {
-	if (ctx.check(TokenType.Variable)) {
-		return parseVariable(ctx);
-	}
-
+): Expression | null {
 	if (
 		ctx.check(TokenType.Fn) ||
 		(ctx.check(TokenType.Static) && ctx.peek(1).type === TokenType.Fn)
@@ -540,6 +536,58 @@ export function parsePrimaryExpression(
 		(ctx.check(TokenType.Static) && ctx.peek(1).type === TokenType.Function)
 	) {
 		return parseClosureExpression(ctx, parseExpression, expr, getStmt);
+	}
+
+	return null;
+}
+
+function tryParseArrayOrList(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+): Expression | null {
+	if (ctx.check(TokenType.OpenBracket) || ctx.check(TokenType.Array)) {
+		return parseArrayExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.List)) {
+		return parseListExpression(ctx, parseExpression, false);
+	}
+
+	return null;
+}
+
+function tryParseKeywordExpression(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+): Expression | null {
+	if (ctx.check(TokenType.Match)) {
+		return parseMatchExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.Yield)) {
+		return parseYieldExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.Throw)) {
+		return parseThrowExpression(ctx, parseExpression);
+	}
+
+	return null;
+}
+
+export function parsePrimaryExpression(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+	expr: ExpressionParser,
+	getStmt?: () => { parseBlockStatement(): import('../ast/nodes').BlockStatement },
+): Expression {
+	if (ctx.check(TokenType.Variable)) {
+		return parseVariable(ctx);
+	}
+
+	const func = tryParseFunction(ctx, parseExpression, expr, getStmt);
+	if (func) {
+		return func;
 	}
 
 	const literal = tryParseLiteral(ctx);
@@ -560,28 +608,14 @@ export function parsePrimaryExpression(
 		return parseParenthesizedExpression(ctx, parseExpression);
 	}
 
-	if (ctx.check(TokenType.List)) {
-		return parseListExpression(ctx, parseExpression, false);
+	const arrayOrList = tryParseArrayOrList(ctx, parseExpression);
+	if (arrayOrList) {
+		return arrayOrList;
 	}
 
-	if (ctx.check(TokenType.OpenBracket)) {
-		return parseArrayExpression(ctx, parseExpression);
-	}
-
-	if (ctx.check(TokenType.Array)) {
-		return parseArrayExpression(ctx, parseExpression);
-	}
-
-	if (ctx.check(TokenType.Match)) {
-		return parseMatchExpression(ctx, parseExpression);
-	}
-
-	if (ctx.check(TokenType.Yield)) {
-		return parseYieldExpression(ctx, parseExpression);
-	}
-
-	if (ctx.check(TokenType.Throw)) {
-		return parseThrowExpression(ctx, parseExpression);
+	const keywordExpr = tryParseKeywordExpression(ctx, parseExpression);
+	if (keywordExpr) {
+		return keywordExpr;
 	}
 
 	throw ctx.error('Unexpected token');
