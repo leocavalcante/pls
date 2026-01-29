@@ -115,14 +115,15 @@ export function parseForeachStatement(
 	ctx.expect(TokenType.As, 'Expected "as" in foreach');
 
 	let key: Expression | null = null;
+	let byRef = ctx.match(TokenType.Ampersand);
 	let value = callbacks.parseExpression();
 
 	if (ctx.match(TokenType.DoubleArrow)) {
 		key = value;
+		byRef = ctx.match(TokenType.Ampersand);
 		value = callbacks.parseExpression();
 	}
 
-	// Convert array to list for foreach destructuring
 	if (value.kind === 'ArrayExpression') {
 		value = convertArrayToList(value);
 	}
@@ -141,6 +142,7 @@ export function parseForeachStatement(
 		source,
 		key,
 		value,
+		byRef,
 		body,
 		loc: createLocation(start, ctx.previous().end),
 	};

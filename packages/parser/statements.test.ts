@@ -97,6 +97,7 @@ describe('Parser - Statements', () => {
 			const stmt = ast.statements[0];
 			if (stmt?.kind === 'ForeachStatement') {
 				expect(stmt.key).toBeNull();
+				expect(stmt.byRef).toBe(false);
 			}
 		});
 
@@ -105,6 +106,25 @@ describe('Parser - Statements', () => {
 			const stmt = ast.statements[0];
 			if (stmt?.kind === 'ForeachStatement') {
 				expect(stmt.key).not.toBeNull();
+				expect(stmt.byRef).toBe(false);
+			}
+		});
+
+		test('parses foreach with reference value', () => {
+			const ast = parser.parse('<?php foreach ($arr as &$val) { $val = 1; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ForeachStatement') {
+				expect(stmt.key).toBeNull();
+				expect(stmt.byRef).toBe(true);
+			}
+		});
+
+		test('parses foreach with key and reference value', () => {
+			const ast = parser.parse('<?php foreach ($arr as $key => &$val) { $val = 1; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ForeachStatement') {
+				expect(stmt.key).not.toBeNull();
+				expect(stmt.byRef).toBe(true);
 			}
 		});
 	});

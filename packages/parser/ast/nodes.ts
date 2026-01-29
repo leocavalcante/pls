@@ -91,6 +91,7 @@ export interface ForeachStatement extends BaseNode {
 	source: Expression;
 	key: Expression | null;
 	value: Expression;
+	byRef: boolean;
 	body: Statement | BlockStatement;
 }
 
