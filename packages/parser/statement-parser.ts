@@ -37,6 +37,9 @@ export class StatementParser {
 	) {}
 
 	parseStatement(): Statement | null {
+		// Skip comments but capture DocComments for potential declarations
+		this.ctx.skipCommentsAndCaptureDocComment();
+
 		const htmlOrTag = this.tryParseHtmlOrTags();
 		if (htmlOrTag !== undefined) return htmlOrTag;
 
@@ -156,8 +159,6 @@ export class StatementParser {
 	}
 
 	private tryParseDeclaration(): Statement | null | undefined {
-		this.ctx.skipCommentsAndCaptureDocComment();
-
 		if (this.ctx.check(TokenType.AttributeStart)) {
 			return this.parseDeclarationWithAttributes();
 		}
