@@ -19,6 +19,7 @@ import {
 import {
 	parseBreakStatement,
 	parseContinueStatement,
+	parseDeclareStatement,
 	parseEchoStatement,
 	parseExpressionStatement,
 	parseIncludeStatement,
@@ -105,6 +106,10 @@ export class StatementParser {
 			this.ctx.check(TokenType.RequireOnce)
 		) {
 			return parseIncludeStatement(this.ctx, this.simpleCallbacks());
+		}
+
+		if (this.ctx.check(TokenType.Declare)) {
+			return parseDeclareStatement(this.ctx, this.declareCallbacks());
 		}
 
 		return null;
@@ -303,6 +308,14 @@ export class StatementParser {
 			parsePrintExpression: (start: { line: number; column: number; offset: number }) =>
 				this.expr.parsePrintExpression(start),
 			parseIncludeExpression: () => this.expr.parseIncludeExpression(),
+		};
+	}
+
+	private declareCallbacks() {
+		return {
+			parseExpression: () => this.expr.parseExpression(),
+			parseIdentifier: () => this.parseIdentifier(),
+			parseStatement: () => this.parseStatement(),
 		};
 	}
 }

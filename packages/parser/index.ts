@@ -42,6 +42,8 @@ export type {
 	ConstStatement,
 	GlobalStatement,
 	StaticVariableStatement,
+	DeclareStatement,
+	DeclareDirective,
 	InlineHtml,
 	Identifier,
 	Variable,

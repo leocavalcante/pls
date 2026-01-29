@@ -41,6 +41,7 @@ export type Statement =
 	| ConstStatement
 	| GlobalStatement
 	| StaticVariableStatement
+	| DeclareStatement
 	| InlineHtml;
 
 export interface ExpressionStatement extends BaseNode {
@@ -338,6 +339,18 @@ export interface StaticVariableDeclaration extends BaseNode {
 export interface InlineHtml extends BaseNode {
 	kind: 'InlineHtml';
 	value: string;
+}
+
+export interface DeclareDirective extends BaseNode {
+	kind: 'DeclareDirective';
+	key: Identifier;
+	value: Expression;
+}
+
+export interface DeclareStatement extends BaseNode {
+	kind: 'DeclareStatement';
+	directives: DeclareDirective[];
+	body: Statement | Statement[] | null;
 }
 
 export type Expression =
