@@ -4,9 +4,13 @@ import type {
 	ArrowFunction,
 	ClosureExpression,
 	ClosureUse,
+	EmptyExpression,
+	EvalExpression,
+	ExitExpression,
 	Expression,
 	Identifier,
 	InterpolatedString,
+	IssetExpression,
 	ListExpression,
 	ListItem,
 	Literal,
@@ -15,6 +19,7 @@ import type {
 	Parameter,
 	ParenthesizedExpression,
 	ThrowExpression,
+	UnsetExpression,
 	Variable,
 	YieldExpression,
 	YieldFromExpression,
@@ -490,6 +495,10 @@ function tryParseLiteral(ctx: ParserContext): Expression | null {
 }
 
 function tryParseSpecialIdentifier(ctx: ParserContext): Expression | null {
+	if (ctx.check(TokenType.Backslash)) {
+		return parseQualifiedName(ctx);
+	}
+
 	if (!ctx.check(TokenType.Identifier)) {
 		return null;
 	}
@@ -515,7 +524,58 @@ function tryParseSpecialIdentifier(ctx: ParserContext): Expression | null {
 		} satisfies Literal;
 	}
 
+	if (ctx.check(TokenType.Backslash)) {
+		return extendToQualifiedName(ctx, ident);
+	}
+
 	return ident;
+}
+
+function parseQualifiedName(ctx: ParserContext): Identifier {
+	const start = ctx.current().start;
+	let name = '';
+
+	if (ctx.match(TokenType.Backslash)) {
+		name = '\\';
+	}
+
+	name += ctx.expect(TokenType.Identifier, 'Expected identifier').value;
+
+	while (ctx.match(TokenType.Backslash)) {
+		name += '\\';
+		const next = ctx.current();
+		if (next.type === TokenType.Identifier || ctx.isKeywordAsIdentifier()) {
+			name += ctx.advance().value;
+		} else {
+			break;
+		}
+	}
+
+	return {
+		kind: 'Identifier',
+		name,
+		loc: { start, end: ctx.previous().end },
+	};
+}
+
+function extendToQualifiedName(ctx: ParserContext, ident: Identifier): Identifier {
+	let name = ident.name;
+
+	while (ctx.match(TokenType.Backslash)) {
+		name += '\\';
+		const next = ctx.current();
+		if (next.type === TokenType.Identifier || ctx.isKeywordAsIdentifier()) {
+			name += ctx.advance().value;
+		} else {
+			break;
+		}
+	}
+
+	return {
+		kind: 'Identifier',
+		name,
+		loc: { start: ident.loc.start, end: ctx.previous().end },
+	};
 }
 
 function tryParseFunction(
@@ -556,6 +616,107 @@ function tryParseArrayOrList(
 	return null;
 }
 
+function parseExitExpression(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+): ExitExpression {
+	const token = ctx.advance();
+	const start = token.start;
+	let argument: Expression | null = null;
+	let end = token.end;
+
+	if (ctx.match(TokenType.OpenParen)) {
+		if (!ctx.check(TokenType.CloseParen)) {
+			argument = parseExpression();
+		}
+		end = ctx.expect(TokenType.CloseParen, 'Expected ")" after exit').end;
+	}
+
+	return {
+		kind: 'ExitExpression',
+		argument,
+		loc: { start, end },
+	};
+}
+
+function parseIssetExpression(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+): IssetExpression {
+	const start = ctx.advance().start;
+	ctx.expect(TokenType.OpenParen, 'Expected "(" after isset');
+
+	const args: Expression[] = [];
+	if (!ctx.check(TokenType.CloseParen)) {
+		do {
+			args.push(parseExpression());
+		} while (ctx.match(TokenType.Comma));
+	}
+
+	const end = ctx.expect(TokenType.CloseParen, 'Expected ")" after isset').end;
+
+	return {
+		kind: 'IssetExpression',
+		arguments: args,
+		loc: { start, end },
+	};
+}
+
+function parseEmptyExpression(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+): EmptyExpression {
+	const start = ctx.advance().start;
+	ctx.expect(TokenType.OpenParen, 'Expected "(" after empty');
+	const argument = parseExpression();
+	const end = ctx.expect(TokenType.CloseParen, 'Expected ")" after empty').end;
+
+	return {
+		kind: 'EmptyExpression',
+		argument,
+		loc: { start, end },
+	};
+}
+
+function parseEvalExpression(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+): EvalExpression {
+	const start = ctx.advance().start;
+	ctx.expect(TokenType.OpenParen, 'Expected "(" after eval');
+	const argument = parseExpression();
+	const end = ctx.expect(TokenType.CloseParen, 'Expected ")" after eval').end;
+
+	return {
+		kind: 'EvalExpression',
+		argument,
+		loc: { start, end },
+	};
+}
+
+function parseUnsetExpression(
+	ctx: ParserContext,
+	parseExpression: () => Expression,
+): UnsetExpression {
+	const start = ctx.advance().start;
+	ctx.expect(TokenType.OpenParen, 'Expected "(" after unset');
+
+	const args: Expression[] = [];
+	if (!ctx.check(TokenType.CloseParen)) {
+		do {
+			args.push(parseExpression());
+		} while (ctx.match(TokenType.Comma));
+	}
+
+	const end = ctx.expect(TokenType.CloseParen, 'Expected ")" after unset').end;
+
+	return {
+		kind: 'UnsetExpression',
+		arguments: args,
+		loc: { start, end },
+	};
+}
+
 function tryParseKeywordExpression(
 	ctx: ParserContext,
 	parseExpression: () => Expression,
@@ -570,6 +731,26 @@ function tryParseKeywordExpression(
 
 	if (ctx.check(TokenType.Throw)) {
 		return parseThrowExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.Exit)) {
+		return parseExitExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.Isset)) {
+		return parseIssetExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.Empty)) {
+		return parseEmptyExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.Eval)) {
+		return parseEvalExpression(ctx, parseExpression);
+	}
+
+	if (ctx.check(TokenType.Unset)) {
+		return parseUnsetExpression(ctx, parseExpression);
 	}
 
 	return null;
