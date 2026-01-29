@@ -17,6 +17,7 @@ import {
 	parseBitwiseXorExpression,
 	parseComparisonExpression,
 	parseEqualityExpression,
+	parseInstanceofExpression,
 	parseLogicalAndExpression,
 	parseLogicalOrExpression,
 	parseMultiplicativeExpression,
@@ -213,7 +214,22 @@ export class ExpressionParser {
 	}
 
 	private parseComparisonExpression(): Expression {
-		return parseComparisonExpression(this.ctx, () => this.parseShiftExpression());
+		return parseComparisonExpression(this.ctx, () => this.parseInstanceofExpression());
+	}
+
+	private parseInstanceofExpression(): Expression {
+		return parseInstanceofExpression(
+			this.ctx,
+			() => this.parseShiftExpression(),
+			() => this.parseClassNameReference(),
+		);
+	}
+
+	private parseClassNameReference(): Expression {
+		if (this.ctx.check(TokenType.Variable)) {
+			return this.parseVariable();
+		}
+		return this.parsePrimaryExpression();
 	}
 
 	private parseShiftExpression(): Expression {

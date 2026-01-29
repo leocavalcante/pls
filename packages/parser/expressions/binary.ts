@@ -4,6 +4,7 @@ import type {
 	CastExpression,
 	CastType,
 	Expression,
+	InstanceofExpression,
 	UnaryExpression,
 } from '../ast/nodes';
 import type { ParserContext } from '../context';
@@ -207,9 +208,9 @@ export function parseEqualityExpression(
 
 export function parseComparisonExpression(
 	ctx: ParserContext,
-	parseShift: () => Expression,
+	parseInstanceof: () => Expression,
 ): Expression {
-	let left = parseShift();
+	let left = parseInstanceof();
 
 	while (
 		ctx.match(TokenType.LessThan) ||
@@ -226,8 +227,28 @@ export function parseComparisonExpression(
 			[TokenType.Spaceship]: '<=>',
 		};
 		const operator = opMap[ctx.previous().type] ?? '<';
-		const right = parseShift();
+		const right = parseInstanceof();
 		left = createBinaryExpression(left, operator, right);
+	}
+
+	return left;
+}
+
+export function parseInstanceofExpression(
+	ctx: ParserContext,
+	parseShift: () => Expression,
+	parseClassNameReference: () => Expression,
+): Expression {
+	let left = parseShift();
+
+	while (ctx.match(TokenType.Instanceof)) {
+		const right = parseClassNameReference();
+		left = {
+			kind: 'InstanceofExpression',
+			left,
+			right,
+			loc: { start: left.loc.start, end: right.loc.end },
+		} satisfies InstanceofExpression;
 	}
 
 	return left;

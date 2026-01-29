@@ -125,4 +125,38 @@ describe('Parser - Operators', () => {
 			}
 		});
 	});
+
+	describe('instanceof', () => {
+		test('parses simple instanceof', () => {
+			const ast = parser.parse('<?php $x instanceof Foo;');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ExpressionStatement') {
+				expect(stmt.expression.kind).toBe('InstanceofExpression');
+			}
+		});
+
+		test('parses parenthesized instanceof', () => {
+			const ast = parser.parse('<?php if (($x instanceof Foo) === false) {}');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'IfStatement' && stmt.test.kind === 'BinaryExpression') {
+				expect(stmt.test.left.kind).toBe('ParenthesizedExpression');
+			}
+		});
+
+		test('parses instanceof with qualified name', () => {
+			const ast = parser.parse('<?php $x instanceof \\Namespace\\Class;');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'InstanceofExpression') {
+				expect(stmt.expression.right.kind).toBe('Identifier');
+			}
+		});
+
+		test('parses instanceof with variable class', () => {
+			const ast = parser.parse('<?php $x instanceof $class;');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'InstanceofExpression') {
+				expect(stmt.expression.right.kind).toBe('Variable');
+			}
+		});
+	});
 });
