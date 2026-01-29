@@ -255,8 +255,9 @@ export class BackgroundIndexer {
 				const references = this.referenceIndex.getReferencesForUri(uri);
 				this.indexCache.set(uri, definitions, references);
 			}
-		} catch {
+		} catch (error) {
 			this.log(`Failed to index: ${uri}`);
+			this.log(`  Error: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
