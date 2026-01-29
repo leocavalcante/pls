@@ -81,7 +81,10 @@ function traverseAst(node: Node | Node[], visitor: (node: Node) => void): void {
 	}
 
 	visitor(node);
+	traverseNodeChildren(node, visitor);
+}
 
+function traverseNodeChildren(node: Node, visitor: (node: Node) => void): void {
 	switch (node.kind) {
 		case 'Program':
 			traverseAst(node.statements, visitor);

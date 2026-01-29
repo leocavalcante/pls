@@ -21,26 +21,44 @@ export function createReferencesHandler(
 		const references: Location[] = [];
 
 		if (params.context.includeDeclaration) {
-			const defs = index.findAllDefinitions(name);
-			for (const def of defs) {
-				references.push(def.location);
-			}
+			addDefinitionsToReferences(index, name, references);
 		}
 
-		const refs = referenceIndex.findReferences(name);
-		for (const ref of refs) {
-			const isDuplicate = references.some(
-				(r) =>
-					r.uri === ref.location.uri &&
-					r.range.start.line === ref.location.range.start.line &&
-					r.range.start.character === ref.location.range.start.character,
-			);
-
-			if (!isDuplicate) {
-				references.push(ref.location);
-			}
-		}
+		addUniqueReferences(referenceIndex, name, references);
 
 		return references;
 	};
+}
+
+function addDefinitionsToReferences(
+	index: DefinitionIndex,
+	name: string,
+	references: Location[],
+): void {
+	const defs = index.findAllDefinitions(name);
+	for (const def of defs) {
+		references.push(def.location);
+	}
+}
+
+function addUniqueReferences(
+	referenceIndex: ReferenceIndex,
+	name: string,
+	references: Location[],
+): void {
+	const refs = referenceIndex.findReferences(name);
+	for (const ref of refs) {
+		if (!isDuplicateLocation(references, ref.location)) {
+			references.push(ref.location);
+		}
+	}
+}
+
+function isDuplicateLocation(locations: Location[], location: Location): boolean {
+	return locations.some(
+		(loc) =>
+			loc.uri === location.uri &&
+			loc.range.start.line === location.range.start.line &&
+			loc.range.start.character === location.range.start.character,
+	);
 }
