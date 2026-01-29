@@ -32,6 +32,35 @@ export function createPrepareRenameHandler(
 	};
 }
 
+interface RenameContext {
+	isVariable: boolean;
+	name: string;
+	newName: string;
+	searchPattern: string;
+	replacement: string;
+}
+
+function createRenameContext(word: string, newName: string): RenameContext | null {
+	const isVariable = word.startsWith('$');
+	const name = isVariable ? word.slice(1) : word;
+	const normalizedNewName = newName.startsWith('$') ? newName.slice(1) : newName;
+
+	if (!isValidIdentifier(normalizedNewName)) {
+		return null;
+	}
+
+	const searchPattern = isVariable ? `\\$${name}\\b` : `\\b${name}\\b`;
+	const replacement = isVariable ? `$${normalizedNewName}` : normalizedNewName;
+
+	return {
+		isVariable,
+		name,
+		newName: normalizedNewName,
+		searchPattern,
+		replacement,
+	};
+}
+
 export function createRenameHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	getAllDocuments: () => TextDocument[],
@@ -45,65 +74,111 @@ export function createRenameHandler(
 		const word = getWordAtPosition(text, params.position);
 		if (!word) return null;
 
-		const isVariable = word.startsWith('$');
-		const name = isVariable ? word.slice(1) : word;
-		const newName = params.newName.startsWith('$') ? params.newName.slice(1) : params.newName;
+		const context = createRenameContext(word, params.newName);
+		if (!context) return null;
 
-		if (!isValidIdentifier(newName)) {
+		const definition = index.findDefinition(context.name);
+		if (!definition && !context.isVariable) {
 			return null;
 		}
 
-		const definition = index.findDefinition(name);
-		if (!definition && !isVariable) {
-			return null;
-		}
-
-		const changes: Record<string, TextEdit[]> = {};
-		const searchPattern = isVariable ? `\\$${name}\\b` : `\\b${name}\\b`;
-		const regex = new RegExp(searchPattern, 'g');
-		const replacement = isVariable ? `$${newName}` : newName;
-
-		for (const doc of getAllDocuments()) {
-			const docText = doc.getText();
-			const edits: TextEdit[] = [];
-			const lines = docText.split('\n');
-
-			for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-				const line = lines[lineNum];
-				const matches = line.matchAll(regex);
-
-				for (const match of matches) {
-					if (match.index === undefined) continue;
-
-					if (!isVariable && !isSymbolReference(docText, lineNum, match.index, name)) {
-						continue;
-					}
-
-					edits.push({
-						range: {
-							start: { line: lineNum, character: match.index },
-							end: { line: lineNum, character: match.index + match[0].length },
-						},
-						newText: replacement,
-					});
-				}
-			}
-
-			if (edits.length > 0) {
-				changes[doc.uri] = edits;
-			}
-		}
-
-		if (Object.keys(changes).length === 0) {
-			return null;
-		}
-
-		return { changes };
+		const regex = new RegExp(context.searchPattern, 'g');
+		return buildWorkspaceEdit(
+			getAllDocuments(),
+			regex,
+			context.replacement,
+			context.isVariable,
+			context.name,
+		);
 	};
 }
 
 function isValidIdentifier(name: string): boolean {
 	return /^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*$/.test(name);
+}
+
+interface TextEditMatch {
+	lineNum: number;
+	index: number;
+	length: number;
+}
+
+function collectMatchesInLine(
+	line: string,
+	lineNum: number,
+	regex: RegExp,
+	docText: string,
+	isVariable: boolean,
+	name: string,
+): TextEditMatch[] {
+	const results: TextEditMatch[] = [];
+
+	for (const match of line.matchAll(regex)) {
+		if (match.index === undefined) continue;
+
+		if (isVariable || isSymbolReference(docText, lineNum, match.index, name)) {
+			results.push({
+				lineNum,
+				index: match.index,
+				length: match[0].length,
+			});
+		}
+	}
+
+	return results;
+}
+
+function createTextEditsForDocument(
+	doc: TextDocument,
+	regex: RegExp,
+	replacement: string,
+	isVariable: boolean,
+	name: string,
+): TextEdit[] {
+	const docText = doc.getText();
+	const lines = docText.split('\n');
+	const edits: TextEdit[] = [];
+
+	for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+		const line = lines[lineNum];
+		const matches = collectMatchesInLine(line, lineNum, regex, docText, isVariable, name);
+
+		for (const match of matches) {
+			edits.push({
+				range: {
+					start: { line: match.lineNum, character: match.index },
+					end: { line: match.lineNum, character: match.index + match.length },
+				},
+				newText: replacement,
+			});
+		}
+	}
+
+	return edits;
+}
+
+function buildWorkspaceEdit(
+	documents: TextDocument[],
+	regex: RegExp,
+	replacement: string,
+	isVariable: boolean,
+	name: string,
+): WorkspaceEdit | null {
+	const changes: Record<string, TextEdit[]> = {};
+
+	for (const doc of documents) {
+		const edits = createTextEditsForDocument(doc, regex, replacement, isVariable, name);
+
+		if (edits.length > 0) {
+			changes[doc.uri] = edits;
+		}
+	}
+
+	if (Object.keys(changes).length === 0) {
+		return null;
+	}
+
+	return { changes };
 }
 
 function isSymbolReference(text: string, line: number, column: number, name: string): boolean {
@@ -113,16 +188,30 @@ function isSymbolReference(text: string, line: number, column: number, name: str
 
 	const beforeMatch = lineText.slice(0, column);
 
-	if (/['"][^'"]*$/.test(beforeMatch)) {
-		const afterMatch = lineText.slice(column + name.length);
-		if (/^[^'"]*['"]/.test(afterMatch)) {
-			return false;
-		}
+	if (isInsideString(beforeMatch, lineText, column, name)) {
+		return false;
 	}
 
-	if (/\/\/.*$/.test(beforeMatch) || /\/\*(?![^*]*\*\/)/.test(beforeMatch)) {
+	if (isInsideComment(beforeMatch)) {
 		return false;
 	}
 
 	return true;
+}
+
+function isInsideString(
+	beforeMatch: string,
+	lineText: string,
+	column: number,
+	name: string,
+): boolean {
+	if (/['"][^'"]*$/.test(beforeMatch)) {
+		const afterMatch = lineText.slice(column + name.length);
+		return /^[^'"]*['"]/.test(afterMatch);
+	}
+	return false;
+}
+
+function isInsideComment(beforeMatch: string): boolean {
+	return /\/\/.*$/.test(beforeMatch) || /\/\*(?![^*]*\*\/)/.test(beforeMatch);
 }
