@@ -8,6 +8,64 @@ import type { DefinitionIndex } from '../definition-index';
 import { getWordAtPosition } from '../position-utils';
 import type { ReferenceIndex } from '../reference-index';
 
+type HighlightCollector = {
+	highlights: DocumentHighlight[];
+	seen: Set<string>;
+};
+
+function createLocationKey(line: number, character: number): string {
+	return `${line}:${character}`;
+}
+
+function addHighlight(
+	collector: HighlightCollector,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+	kind: number,
+): void {
+	const key = createLocationKey(range.start.line, range.start.character);
+	if (collector.seen.has(key)) return;
+
+	collector.highlights.push({ range, kind: kind as DocumentHighlightKind });
+	collector.seen.add(key);
+}
+
+function collectDefinitionHighlights(
+	collector: HighlightCollector,
+	definitionIndex: DefinitionIndex,
+	name: string,
+	documentUri: string,
+): void {
+	const defs = definitionIndex.findAllDefinitions(name);
+	for (const def of defs) {
+		if (def.location.uri === documentUri) {
+			addHighlight(collector, def.location.range, 2);
+		}
+	}
+}
+
+function collectReferenceHighlights(
+	collector: HighlightCollector,
+	referenceIndex: ReferenceIndex,
+	name: string,
+	documentUri: string,
+	document: TextDocument,
+): void {
+	const refs = referenceIndex.getReferencesForUri(documentUri);
+	for (const ref of refs) {
+		if (ref.name !== name) continue;
+
+		const kind = isWriteContext(
+			document,
+			ref.location.range.start.line,
+			ref.location.range.start.character,
+		)
+			? 3
+			: 2;
+
+		addHighlight(collector, ref.location.range, kind);
+	}
+}
+
 export function createDocumentHighlightsHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	definitionIndex: DefinitionIndex,
@@ -21,45 +79,15 @@ export function createDocumentHighlightsHandler(
 		if (!word) return [];
 
 		const name = word.startsWith('$') ? word.slice(1) : word;
-		const highlights: DocumentHighlight[] = [];
-		const seen = new Set<string>();
+		const collector: HighlightCollector = {
+			highlights: [],
+			seen: new Set<string>(),
+		};
 
-		const defs = definitionIndex.findAllDefinitions(name);
-		for (const def of defs) {
-			if (def.location.uri === params.textDocument.uri) {
-				const key = `${def.location.range.start.line}:${def.location.range.start.character}`;
-				if (!seen.has(key)) {
-					highlights.push({
-						range: def.location.range,
-						kind: 2,
-					});
-					seen.add(key);
-				}
-			}
-		}
+		collectDefinitionHighlights(collector, definitionIndex, name, params.textDocument.uri);
+		collectReferenceHighlights(collector, referenceIndex, name, params.textDocument.uri, document);
 
-		const refs = referenceIndex.getReferencesForUri(params.textDocument.uri);
-		for (const ref of refs) {
-			if (ref.name === name) {
-				const key = `${ref.location.range.start.line}:${ref.location.range.start.character}`;
-				if (!seen.has(key)) {
-					const kind = isWriteContext(
-						document,
-						ref.location.range.start.line,
-						ref.location.range.start.character,
-					)
-						? 3
-						: 2;
-					highlights.push({
-						range: ref.location.range,
-						kind: kind as DocumentHighlightKind,
-					});
-					seen.add(key);
-				}
-			}
-		}
-
-		return highlights;
+		return collector.highlights;
 	};
 }
 
