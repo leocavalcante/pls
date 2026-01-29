@@ -4,4 +4,5 @@
 .sisyphus/
 dist/
 node_modules/
+packages/vscode/server/
 
