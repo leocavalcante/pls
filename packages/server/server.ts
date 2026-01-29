@@ -1,0 +1,280 @@
+import { Parser } from '@pls/parser';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import {
+	type InitializeParams,
+	type InitializeResult,
+	ProposedFeatures,
+	TextDocumentSyncKind,
+	TextDocuments,
+	createConnection,
+} from 'vscode-languageserver/node';
+import { type BackgroundIndexer, createBackgroundIndexer } from './background-indexer';
+import { DefinitionIndex } from './definition-index';
+import { DocumentManager } from './document-manager';
+import {
+	createCallHierarchyIncomingCallsHandler,
+	createCallHierarchyOutgoingCallsHandler,
+	createPrepareCallHierarchyHandler,
+} from './handlers/call-hierarchy';
+import { createCodeActionHandler } from './handlers/code-actions';
+import { createCompletionHandler } from './handlers/completion';
+import { createDefinitionHandler } from './handlers/definition';
+import { createDiagnosticHandler } from './handlers/diagnostics';
+import { createDocumentHighlightsHandler } from './handlers/document-highlights';
+import { createDocumentLinksHandler } from './handlers/document-links';
+import { createFoldingRangeHandler } from './handlers/folding-range';
+import { createFormattingHandler, createRangeFormattingHandler } from './handlers/formatting';
+import { createHoverHandler } from './handlers/hover';
+import { createInlayHintsHandler } from './handlers/inlay-hints';
+import { createReferencesHandler } from './handlers/references';
+import { createPrepareRenameHandler, createRenameHandler } from './handlers/rename';
+import {
+	createSemanticTokensHandler,
+	tokenModifiers,
+	tokenTypes,
+} from './handlers/semantic-tokens';
+import { createSignatureHelpHandler } from './handlers/signature-help';
+import { createTypeHierarchyHandler } from './handlers/type-hierarchy';
+import { createWorkspaceSymbolsHandler } from './handlers/workspace-symbols';
+import { ReferenceIndex } from './reference-index';
+import { SymbolExtractor } from './symbol-extractor';
+
+const connection = createConnection(ProposedFeatures.all);
+const documents = new TextDocuments(TextDocument);
+const documentManager = new DocumentManager();
+const symbolExtractor = new SymbolExtractor();
+const definitionIndex = new DefinitionIndex();
+const referenceIndex = new ReferenceIndex();
+const parser = new Parser();
+
+let backgroundIndexer: BackgroundIndexer | null = null;
+let initializeParams: InitializeParams;
+
+connection.onInitialize((params: InitializeParams): InitializeResult => {
+	initializeParams = params;
+	connection.console.log('PHP Language Server initializing...');
+
+	return {
+		capabilities: {
+			textDocumentSync: TextDocumentSyncKind.Incremental,
+			documentSymbolProvider: true,
+			hoverProvider: true,
+			definitionProvider: true,
+			referencesProvider: true,
+			completionProvider: {
+				triggerCharacters: ['$', '>', ':'],
+			},
+			signatureHelpProvider: {
+				triggerCharacters: ['(', ','],
+			},
+			workspaceSymbolProvider: true,
+			documentFormattingProvider: true,
+			documentRangeFormattingProvider: true,
+			renameProvider: {
+				prepareProvider: true,
+			},
+			codeActionProvider: true,
+			diagnosticProvider: {
+				interFileDependencies: false,
+				workspaceDiagnostics: false,
+			},
+			typeHierarchyProvider: true,
+			callHierarchyProvider: true,
+			documentHighlightProvider: true,
+			semanticTokensProvider: {
+				legend: {
+					tokenTypes,
+					tokenModifiers,
+				},
+				full: true,
+			},
+			inlayHintProvider: true,
+			documentLinkProvider: {
+				resolveProvider: false,
+			},
+			foldingRangeProvider: true,
+		},
+		serverInfo: {
+			name: 'pls',
+			version: '0.1.0',
+		},
+	};
+});
+
+connection.onInitialized(() => {
+	connection.console.log('PHP Language Server initialized');
+
+	backgroundIndexer = createBackgroundIndexer(
+		initializeParams,
+		definitionIndex,
+		referenceIndex,
+		connection,
+	);
+
+	if (backgroundIndexer) {
+		backgroundIndexer.start();
+	}
+});
+
+documents.onDidOpen((event) => {
+	const data = documentManager.open(event.document);
+	connection.sendDiagnostics({
+		uri: event.document.uri,
+		diagnostics: data.diagnostics,
+	});
+	if (data.ast) {
+		definitionIndex.indexDocument(event.document.uri, data.ast);
+		referenceIndex.indexDocument(event.document.uri, data.ast);
+	}
+});
+
+documents.onDidChangeContent((event) => {
+	const data = documentManager.change(event.document);
+	connection.sendDiagnostics({
+		uri: event.document.uri,
+		diagnostics: data.diagnostics,
+	});
+	if (data.ast) {
+		definitionIndex.indexDocument(event.document.uri, data.ast);
+		referenceIndex.indexDocument(event.document.uri, data.ast);
+	}
+});
+
+documents.onDidClose((event) => {
+	documentManager.close(event.document.uri);
+	definitionIndex.clearDocument(event.document.uri);
+	referenceIndex.clearDocument(event.document.uri);
+	connection.sendDiagnostics({
+		uri: event.document.uri,
+		diagnostics: [],
+	});
+});
+
+connection.onDocumentSymbol((params) => {
+	const ast = documentManager.getAst(params.textDocument.uri);
+	if (!ast) {
+		return [];
+	}
+	return symbolExtractor.extract(ast);
+});
+
+connection.onHover(
+	createHoverHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+	),
+);
+
+connection.onDefinition(createDefinitionHandler((uri) => documents.get(uri), definitionIndex));
+
+connection.onReferences(
+	createReferencesHandler(
+		(uri) => documents.get(uri),
+		() => documents.all(),
+		definitionIndex,
+		referenceIndex,
+	),
+);
+
+connection.onCompletion(createCompletionHandler((uri) => documents.get(uri), definitionIndex));
+
+connection.onSignatureHelp(
+	createSignatureHelpHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+	),
+);
+
+connection.onWorkspaceSymbol(createWorkspaceSymbolsHandler(definitionIndex));
+
+connection.onDocumentFormatting(createFormattingHandler((uri) => documents.get(uri)));
+
+connection.onDocumentRangeFormatting(createRangeFormattingHandler((uri) => documents.get(uri)));
+
+connection.onPrepareRename(
+	createPrepareRenameHandler((uri) => documents.get(uri), definitionIndex),
+);
+
+connection.onRenameRequest(
+	createRenameHandler(
+		(uri) => documents.get(uri),
+		() => documents.all(),
+		definitionIndex,
+	),
+);
+
+connection.onCodeAction(
+	createCodeActionHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+	),
+);
+
+connection.languages.diagnostics.on(
+	createDiagnosticHandler((uri) => documents.get(uri), documentManager),
+);
+
+const typeHierarchyHandler = createTypeHierarchyHandler(
+	(uri) => documents.get(uri),
+	definitionIndex,
+);
+
+connection.languages.typeHierarchy.onPrepare(typeHierarchyHandler.prepareTypeHierarchy);
+connection.languages.typeHierarchy.onSupertypes(typeHierarchyHandler.supertypes);
+connection.languages.typeHierarchy.onSubtypes(typeHierarchyHandler.subtypes);
+
+connection.languages.callHierarchy.onPrepare(
+	createPrepareCallHierarchyHandler((uri) => documents.get(uri), definitionIndex),
+);
+connection.languages.callHierarchy.onIncomingCalls(
+	createCallHierarchyIncomingCallsHandler(
+		(uri) => documents.get(uri),
+		definitionIndex,
+		referenceIndex,
+	),
+);
+connection.languages.callHierarchy.onOutgoingCalls(
+	createCallHierarchyOutgoingCallsHandler(
+		(uri) => documents.get(uri),
+		definitionIndex,
+		referenceIndex,
+	),
+);
+
+connection.languages.semanticTokens.on(
+	createSemanticTokensHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+	),
+);
+
+connection.languages.inlayHint.on(
+	createInlayHintsHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+	),
+);
+
+connection.onDocumentHighlight(
+	createDocumentHighlightsHandler((uri) => documents.get(uri), definitionIndex, referenceIndex),
+);
+
+connection.onDocumentLinks(createDocumentLinksHandler((uri) => documents.get(uri), parser));
+
+connection.onFoldingRanges(
+	createFoldingRangeHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+	),
+);
+
+documents.listen(connection);
+
+export function startServer(): void {
+	connection.listen();
+}

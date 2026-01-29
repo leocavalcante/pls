@@ -1,0 +1,31 @@
+{
+	"name": "@pls/server",
+	"version": "0.1.0",
+	"type": "module",
+	"main": "index.ts",
+	"bin": {
+		"pls": "index.ts"
+	},
+	"scripts": {
+		"dev": "bun run index.ts",
+		"test": "bun test",
+		"test:coverage": "bun test --coverage",
+		"build": "bun build --compile --minify --sourcemap ./index.ts --outfile dist/pls",
+		"build:linux-x64": "bun build --compile --minify --target=bun-linux-x64 ./index.ts --outfile dist/pls-linux-x64",
+		"build:linux-arm64": "bun build --compile --minify --target=bun-linux-arm64 ./index.ts --outfile dist/pls-linux-arm64",
+		"build:darwin-arm64": "bun build --compile --minify --target=bun-darwin-arm64 ./index.ts --outfile dist/pls-darwin-arm64",
+		"build:darwin-x64": "bun build --compile --minify --target=bun-darwin-x64 ./index.ts --outfile dist/pls-darwin-x64",
+		"build:windows-x64": "bun build --compile --minify --target=bun-windows-x64 ./index.ts --outfile dist/pls-windows-x64.exe",
+		"build:all": "bun run build:linux-x64 && bun run build:linux-arm64 && bun run build:darwin-arm64 && bun run build:darwin-x64 && bun run build:windows-x64",
+		"lint": "bunx @biomejs/biome check ."
+	},
+	"dependencies": {
+		"@pls/parser": "workspace:*",
+		"vscode-languageserver": "^9.0.1",
+		"vscode-languageserver-textdocument": "^1.0.12",
+		"vscode-uri": "^3.1.0"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.1.14"
+	}
+}

@@ -1,0 +1,350 @@
+import type {
+	Argument,
+	CallExpression,
+	ClassDeclaration,
+	Expression,
+	FunctionDeclaration,
+	MethodCallExpression,
+	MethodDeclaration,
+	Program,
+	Statement,
+} from '@pls/parser';
+import type { InlayHint, InlayHintParams, Position, Range } from 'vscode-languageserver';
+import { InlayHintKind } from 'vscode-languageserver';
+import type { TextDocument } from 'vscode-languageserver-textdocument';
+import type { DefinitionIndex } from '../definition-index';
+
+export function createInlayHintsHandler(
+	getDocument: (uri: string) => TextDocument | undefined,
+	getAst: (uri: string) => Program | null,
+	index: DefinitionIndex,
+) {
+	return (params: InlayHintParams): InlayHint[] => {
+		const document = getDocument(params.textDocument.uri);
+		const ast = getAst(params.textDocument.uri);
+		if (!document || !ast) return [];
+
+		const hints: InlayHint[] = [];
+		const range = params.range;
+
+		collectHintsFromStatements(ast.statements, range, hints, index);
+
+		return hints;
+	};
+}
+
+function collectHintsFromStatements(
+	statements: Statement[],
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	for (const statement of statements) {
+		collectHintsFromStatement(statement, range, hints, index);
+	}
+}
+
+function collectHintsFromStatement(
+	statement: Statement,
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	if (!isInRange(statement.loc, range)) return;
+
+	switch (statement.kind) {
+		case 'ExpressionStatement':
+			collectHintsFromExpression(statement.expression, range, hints, index);
+			break;
+		case 'ReturnStatement':
+			if (statement.argument) {
+				collectHintsFromExpression(statement.argument, range, hints, index);
+			}
+			break;
+		case 'IfStatement':
+			collectHintsFromExpression(statement.test, range, hints, index);
+			collectHintsFromStatement(statement.consequent, range, hints, index);
+			if (statement.alternate) {
+				collectHintsFromStatement(statement.alternate, range, hints, index);
+			}
+			break;
+		case 'WhileStatement':
+		case 'DoWhileStatement':
+			collectHintsFromExpression(statement.test, range, hints, index);
+			collectHintsFromStatement(statement.body, range, hints, index);
+			break;
+		case 'ForStatement':
+			for (const init of statement.init) {
+				collectHintsFromExpression(init, range, hints, index);
+			}
+			for (const test of statement.test) {
+				collectHintsFromExpression(test, range, hints, index);
+			}
+			for (const update of statement.update) {
+				collectHintsFromExpression(update, range, hints, index);
+			}
+			collectHintsFromStatement(statement.body, range, hints, index);
+			break;
+		case 'ForeachStatement':
+			collectHintsFromExpression(statement.source, range, hints, index);
+			if (statement.key) {
+				collectHintsFromExpression(statement.key, range, hints, index);
+			}
+			collectHintsFromExpression(statement.value, range, hints, index);
+			collectHintsFromStatement(statement.body, range, hints, index);
+			break;
+		case 'BlockStatement':
+			collectHintsFromStatements(statement.statements, range, hints, index);
+			break;
+		case 'FunctionDeclaration':
+			addReturnTypeHint(statement, range, hints);
+			if (statement.body) {
+				collectHintsFromStatement(statement.body, range, hints, index);
+			}
+			break;
+		case 'ClassDeclaration':
+			collectHintsFromClass(statement, range, hints, index);
+			break;
+		case 'TryStatement':
+			collectHintsFromStatement(statement.block, range, hints, index);
+			for (const catchClause of statement.catches) {
+				collectHintsFromStatement(catchClause.body, range, hints, index);
+			}
+			if (statement.finalizer) {
+				collectHintsFromStatement(statement.finalizer, range, hints, index);
+			}
+			break;
+		case 'ThrowStatement':
+			collectHintsFromExpression(statement.argument, range, hints, index);
+			break;
+	}
+}
+
+function collectHintsFromClass(
+	classDecl: ClassDeclaration,
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	for (const member of classDecl.body.members) {
+		if (!isInRange(member.loc, range)) continue;
+
+		if (member.kind === 'MethodDeclaration') {
+			addReturnTypeHintForMethod(member, range, hints);
+			if (member.body) {
+				collectHintsFromStatement(member.body, range, hints, index);
+			}
+		}
+	}
+}
+
+function collectHintsFromExpression(
+	expression: Expression,
+	range: Range,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	if (!isInRange(expression.loc, range)) return;
+
+	switch (expression.kind) {
+		case 'CallExpression':
+			addParameterHints(expression, hints, index, false);
+			collectHintsFromExpression(expression.callee, range, hints, index);
+			for (const arg of expression.arguments) {
+				collectHintsFromExpression(arg.value, range, hints, index);
+			}
+			break;
+		case 'MethodCallExpression':
+			addParameterHintsForMethod(expression, hints, index);
+			collectHintsFromExpression(expression.object, range, hints, index);
+			collectHintsFromExpression(expression.property, range, hints, index);
+			for (const arg of expression.arguments) {
+				collectHintsFromExpression(arg.value, range, hints, index);
+			}
+			break;
+		case 'NewExpression':
+			collectHintsFromExpression(expression.class, range, hints, index);
+			for (const arg of expression.arguments) {
+				collectHintsFromExpression(arg.value, range, hints, index);
+			}
+			break;
+		case 'BinaryExpression':
+			collectHintsFromExpression(expression.left, range, hints, index);
+			collectHintsFromExpression(expression.right, range, hints, index);
+			break;
+		case 'UnaryExpression':
+			collectHintsFromExpression(expression.argument, range, hints, index);
+			break;
+		case 'AssignmentExpression':
+			collectHintsFromExpression(expression.left, range, hints, index);
+			collectHintsFromExpression(expression.right, range, hints, index);
+			break;
+		case 'TernaryExpression':
+			collectHintsFromExpression(expression.test, range, hints, index);
+			if (expression.consequent) {
+				collectHintsFromExpression(expression.consequent, range, hints, index);
+			}
+			collectHintsFromExpression(expression.alternate, range, hints, index);
+			break;
+		case 'ArrayExpression':
+			for (const item of expression.items) {
+				if (item.key) {
+					collectHintsFromExpression(item.key, range, hints, index);
+				}
+				collectHintsFromExpression(item.value, range, hints, index);
+			}
+			break;
+		case 'PropertyAccessExpression':
+			collectHintsFromExpression(expression.object, range, hints, index);
+			collectHintsFromExpression(expression.property, range, hints, index);
+			break;
+		case 'ArrayAccessExpression':
+			collectHintsFromExpression(expression.array, range, hints, index);
+			if (expression.index) {
+				collectHintsFromExpression(expression.index, range, hints, index);
+			}
+			break;
+		case 'ParenthesizedExpression':
+			collectHintsFromExpression(expression.expression, range, hints, index);
+			break;
+	}
+}
+
+function addParameterHints(
+	call: CallExpression,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+	isMethod: boolean,
+): void {
+	if (call.arguments.length <= 1) return;
+
+	const functionName = extractFunctionName(call.callee);
+	if (!functionName) return;
+
+	const def = index.findDefinition(functionName, isMethod ? 'method' : 'function');
+	if (!def?.parameters || def.parameters.length === 0) return;
+
+	for (let i = 0; i < call.arguments.length; i++) {
+		const arg = call.arguments[i];
+		if (arg.name) continue;
+
+		const param = def.parameters[i];
+		if (!param) continue;
+
+		if (shouldShowParameterHint(arg, param.name)) {
+			hints.push({
+				position: toPosition(arg.value.loc.start),
+				label: `${param.name}:`,
+				kind: InlayHintKind.Parameter,
+				paddingRight: true,
+			});
+		}
+	}
+}
+
+function addParameterHintsForMethod(
+	call: MethodCallExpression,
+	hints: InlayHint[],
+	index: DefinitionIndex,
+): void {
+	if (call.arguments.length <= 1) return;
+
+	const methodName = extractMethodName(call.property);
+	if (!methodName) return;
+
+	const def = index.findDefinition(methodName, 'method');
+	if (!def?.parameters || def.parameters.length === 0) return;
+
+	for (let i = 0; i < call.arguments.length; i++) {
+		const arg = call.arguments[i];
+		if (arg.name) continue;
+
+		const param = def.parameters[i];
+		if (!param) continue;
+
+		if (shouldShowParameterHint(arg, param.name)) {
+			hints.push({
+				position: toPosition(arg.value.loc.start),
+				label: `${param.name}:`,
+				kind: InlayHintKind.Parameter,
+				paddingRight: true,
+			});
+		}
+	}
+}
+
+function addReturnTypeHint(func: FunctionDeclaration, range: Range, hints: InlayHint[]): void {
+	if (func.returnType) return;
+	if (!func.docComment) return;
+	if (!isInRange(func.loc, range)) return;
+
+	const returnType = extractReturnTypeFromDoc(func.docComment);
+	if (!returnType) return;
+
+	const position = toPosition(func.name.loc.end);
+	hints.push({
+		position,
+		label: `: ${returnType}`,
+		kind: InlayHintKind.Type,
+		paddingLeft: false,
+	});
+}
+
+function addReturnTypeHintForMethod(
+	method: MethodDeclaration,
+	range: Range,
+	hints: InlayHint[],
+): void {
+	if (method.returnType) return;
+	if (!method.docComment) return;
+	if (!isInRange(method.loc, range)) return;
+
+	const returnType = extractReturnTypeFromDoc(method.docComment);
+	if (!returnType) return;
+
+	const position = toPosition(method.name.loc.end);
+	hints.push({
+		position,
+		label: `: ${returnType}`,
+		kind: InlayHintKind.Type,
+		paddingLeft: false,
+	});
+}
+
+function extractReturnTypeFromDoc(docComment: string): string | null {
+	const returnMatch = docComment.match(/@return\s+(\S+)/);
+	return returnMatch ? returnMatch[1] : null;
+}
+
+function shouldShowParameterHint(arg: Argument, paramName: string): boolean {
+	if (arg.value.kind === 'Variable') {
+		return arg.value.name !== paramName;
+	}
+	return true;
+}
+
+function extractFunctionName(callee: Expression): string | null {
+	if (callee.kind === 'Identifier') {
+		return callee.name;
+	}
+	return null;
+}
+
+function extractMethodName(property: Expression): string | null {
+	if (property.kind === 'Identifier') {
+		return property.name;
+	}
+	return null;
+}
+
+function isInRange(loc: { start: { line: number; column: number } }, range: Range): boolean {
+	const line = loc.start.line - 1;
+	return line >= range.start.line && line <= range.end.line;
+}
+
+function toPosition(loc: { line: number; column: number }): Position {
+	return {
+		line: loc.line - 1,
+		character: loc.column - 1,
+	};
+}
