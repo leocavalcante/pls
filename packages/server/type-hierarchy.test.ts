@@ -135,7 +135,7 @@ describe('TypeHierarchyHandler', () => {
 
 			// Then get supertypes
 			const result = handler.supertypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySupertypesParams);
 
 			expect(result).not.toBeNull();
@@ -166,7 +166,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.supertypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySupertypesParams);
 
 			expect(result).not.toBeNull();
@@ -197,7 +197,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.supertypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySupertypesParams);
 
 			expect(result).not.toBeNull();
@@ -224,7 +224,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.supertypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySupertypesParams);
 
 			expect(result).not.toBeNull();
@@ -254,7 +254,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.supertypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySupertypesParams);
 
 			expect(result).not.toBeNull();
@@ -287,7 +287,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.subtypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySubtypesParams);
 
 			expect(result).not.toBeNull();
@@ -319,7 +319,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.subtypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySubtypesParams);
 
 			expect(result).not.toBeNull();
@@ -346,7 +346,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.subtypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySubtypesParams);
 
 			expect(result).not.toBeNull();
@@ -376,7 +376,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.subtypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySubtypesParams);
 
 			expect(result).not.toBeNull();
@@ -408,7 +408,7 @@ describe('TypeHierarchyHandler', () => {
 			expect(prepared).not.toBeNull();
 
 			const result = handler.subtypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySubtypesParams);
 
 			expect(result).not.toBeNull();
@@ -454,7 +454,7 @@ describe('TypeHierarchyHandler', () => {
 
 			// Get subtypes - should find Dog from file 2
 			const result = handler.subtypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySubtypesParams);
 
 			expect(result).not.toBeNull();
@@ -486,7 +486,7 @@ describe('TypeHierarchyHandler', () => {
 
 			// Should return empty array when parent is not found
 			const result = handler.supertypes({
-				item: prepared![0],
+				item: prepared?.[0],
 			} as TypeHierarchySupertypesParams);
 
 			expect(result).not.toBeNull();

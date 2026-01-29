@@ -805,7 +805,7 @@ function checkExtractMethod(
 	const params = externalVars.map((varName) => {
 		const varType = inferVariableType(
 			varName,
-			methodDecl.body!.statements,
+			methodDecl.body?.statements,
 			range,
 			inferenceContext,
 		);
@@ -818,11 +818,11 @@ function checkExtractMethod(
 
 	const extractedText = document.getText({
 		start: {
-			line: selectedStatements[0]!.loc.start.line - 1,
+			line: selectedStatements[0]?.loc.start.line - 1,
 			character: 0,
 		},
 		end: {
-			line: selectedStatements[selectedStatements.length - 1]!.loc.end.line - 1,
+			line: selectedStatements[selectedStatements.length - 1]?.loc.end.line - 1,
 			character: 1000,
 		},
 	});
@@ -846,11 +846,11 @@ function checkExtractMethod(
 					{
 						range: {
 							start: {
-								line: selectedStatements[0]!.loc.start.line - 1,
+								line: selectedStatements[0]?.loc.start.line - 1,
 								character: 0,
 							},
 							end: {
-								line: selectedStatements[selectedStatements.length - 1]!.loc.end.line - 1,
+								line: selectedStatements[selectedStatements.length - 1]?.loc.end.line - 1,
 								character: 1000,
 							},
 						},

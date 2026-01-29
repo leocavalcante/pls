@@ -1,11 +1,6 @@
 {
-  "active_plan": null,
-  "completed_plan": "/Users/leocavalcante/Projects/leocavalcante/pls/.sisyphus/plans/package-restructure.md",
-  "started_at": "2026-01-29T18:00:17.774Z",
-  "completed_at": "2026-01-29T18:13:47.101Z",
-  "session_ids": [
-    "ses_3f5494af8fferr5A7NaMj1f5pt"
-  ],
-  "plan_name": "package-restructure",
-  "status": "completed"
+  "active_plan": "/Users/leocavalcante/Projects/leocavalcante/pls/.sisyphus/plans/fix-biome-lint-issues.md",
+  "started_at": "2026-01-29T18:22:47.267Z",
+  "session_ids": ["ses_3f506bf34ffexemzlHa6ikbQZT"],
+  "plan_name": "fix-biome-lint-issues"
 }

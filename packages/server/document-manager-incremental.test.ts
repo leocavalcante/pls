@@ -40,7 +40,7 @@ describe('DocumentManager - Incremental Parsing Integration', () => {
 		const data = manager.open(doc);
 
 		expect(data.lastParseTimeMs).toBeDefined();
-		expect(data.lastParseTimeMs! < 50).toBe(true);
+		expect(data.lastParseTimeMs).toBeLessThan(50);
 
 		console.log(
 			`Parse time for ${lines.length} lines: ${data.lastParseTimeMs?.toFixed(2)}ms (target: <50ms)`,
