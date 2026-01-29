@@ -1,0 +1,6 @@
+**
+!LICENSE
+!LICENSE.txt
+!package.json
+!dist/**
+!dist/extension.js
