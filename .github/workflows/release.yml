@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: bun-linux-x64
+            name: pls-linux-x64
+          - target: bun-linux-arm64
+            name: pls-linux-arm64
+          - target: bun-darwin-arm64
+            name: pls-darwin-arm64
+          - target: bun-darwin-x64
+            name: pls-darwin-x64
+          - target: bun-windows-x64
+            name: pls-windows-x64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build ${{ matrix.name }}
+        run: |
+          cd packages/server
+          bun build --compile --minify --target=${{ matrix.target }} ./index.ts --outfile dist/${{ matrix.name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: packages/server/dist/${{ matrix.name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd release-assets
+          sha256sum pls-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Get previous tag
+        id: previous-tag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ -n "${{ steps.previous-tag.outputs.tag }}" ]]; then
+            gh release create "${{ github.ref_name }}" \
+              --title "Release ${{ github.ref_name }}" \
+              --generate-notes \
+              --notes-start-tag "${{ steps.previous-tag.outputs.tag }}" \
+              release-assets/*
+          else
+            gh release create "${{ github.ref_name }}" \
+              --title "Release ${{ github.ref_name }}" \
+              --generate-notes \
+              release-assets/*
+          fi

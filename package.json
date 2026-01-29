@@ -1,0 +1,30 @@
+{
+	"name": "pls",
+	"private": true,
+	"version": "0.1.0",
+	"description": "PHP Language Server - A TypeScript LSP implementation with custom PHP parser",
+	"type": "module",
+	"workspaces": ["packages/*"],
+	"scripts": {
+		"dev": "bun --filter='@pls/server' run dev",
+		"test": "bun --filter='*' test",
+		"test:watch": "bun --filter='*' test --watch",
+		"test:coverage": "bun --filter='*' test --coverage",
+		"build": "bun --filter='@pls/server' run build",
+		"build:all": "bun --filter='@pls/server' run build:all",
+		"lint": "bunx @biomejs/biome check packages/*",
+		"lint:fix": "bunx @biomejs/biome check --write packages/*"
+	},
+	"dependencies": {
+		"vscode-languageserver": "^9.0.1",
+		"vscode-languageserver-textdocument": "^1.0.12",
+		"vscode-uri": "^3.1.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@types/bun": "^1.1.14"
+	},
+	"keywords": ["php", "lsp", "language-server", "parser"],
+	"author": "Leo Cavalcante",
+	"license": "MIT"
+}
