@@ -21,7 +21,6 @@ import {
 	createLocation,
 } from './ast/nodes';
 import type { ParserContext } from './context';
-import type { Token } from './tokens';
 import {
 	parseAttribute,
 	parseAttributeGroups,
@@ -56,6 +55,7 @@ import {
 import { parseTypeNode } from './declarations/types';
 import type { ExpressionParser } from './expression-parser';
 import type { StatementParser } from './statement-parser';
+import type { Token } from './tokens';
 import { TokenType } from './tokens';
 
 export class DeclarationParser {
