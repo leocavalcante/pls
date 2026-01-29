@@ -8,20 +8,26 @@ import {
 	tokenTypes,
 } from './handlers/semantic-tokens';
 
-function decodeTokens(data: number[]): Array<{
+interface DecodedToken {
 	line: number;
 	char: number;
 	length: number;
 	type: string;
 	modifiers: string[];
-}> {
-	const tokens: Array<{
-		line: number;
-		char: number;
-		length: number;
-		type: string;
-		modifiers: string[];
-	}> = [];
+}
+
+function decodeModifiers(modifierBits: number): string[] {
+	const mods: string[] = [];
+	for (let j = 0; j < tokenModifiers.length; j++) {
+		if ((modifierBits & (1 << j)) !== 0) {
+			mods.push(tokenModifiers[j] ?? 'unknown');
+		}
+	}
+	return mods;
+}
+
+function decodeTokens(data: number[]): DecodedToken[] {
+	const tokens: DecodedToken[] = [];
 	let line = 0;
 	let char = 0;
 
@@ -32,24 +38,17 @@ function decodeTokens(data: number[]): Array<{
 		const typeIndex = data[i + 3];
 		const modifierBits = data[i + 4];
 
-		if (deltaLine !== undefined && deltaChar !== undefined && length !== undefined) {
-			line += deltaLine;
-			if (deltaLine !== 0) {
-				char = deltaChar;
-			} else {
-				char += deltaChar;
-			}
-
-			const type = tokenTypes[typeIndex] ?? 'unknown';
-			const mods: string[] = [];
-			for (let j = 0; j < tokenModifiers.length; j++) {
-				if (modifierBits !== undefined && (modifierBits & (1 << j)) !== 0) {
-					mods.push(tokenModifiers[j] ?? 'unknown');
-				}
-			}
-
-			tokens.push({ line, char, length, type, modifiers: mods });
+		if (deltaLine === undefined || deltaChar === undefined || length === undefined) {
+			continue;
 		}
+
+		line += deltaLine;
+		char = deltaLine !== 0 ? deltaChar : char + deltaChar;
+
+		const type = tokenTypes[typeIndex] ?? 'unknown';
+		const modifiers = modifierBits !== undefined ? decodeModifiers(modifierBits) : [];
+
+		tokens.push({ line, char, length, type, modifiers });
 	}
 
 	return tokens;
