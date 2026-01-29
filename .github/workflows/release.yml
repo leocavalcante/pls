@@ -46,8 +46,36 @@ jobs:
           name: ${{ matrix.name }}
           path: packages/server/dist/${{ matrix.name }}
 
+  build-vscode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build VS Code extension
+        run: |
+          cd packages/vscode
+          bun run build
+
+      - name: Package VS Code extension
+        run: |
+          cd packages/vscode
+          bunx @vscode/vsce package --no-dependencies
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pls-vscode.vsix
+          path: packages/vscode/*.vsix
+
   release:
-    needs: build
+    needs: [build, build-vscode]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +91,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd release-assets
-          sha256sum pls-* > SHA256SUMS
+          sha256sum pls-* *.vsix > SHA256SUMS
           cat SHA256SUMS
 
       - name: Get previous tag
