@@ -89,6 +89,7 @@ function processHeredocLine(line: string, trimmed: string, state: HeredocState):
 	if (heredocMatch && !trimmed.includes(heredocMatch[1], heredocMatch[0].length)) {
 		state.inHeredoc = true;
 		state.heredocEnd = heredocMatch[1];
+		return line;
 	}
 
 	return null;
@@ -157,10 +158,13 @@ function formatPhp(text: string, options: FormattingOptions): string {
 		const lineIndentDelta = getIndentDelta(trimmed);
 		const currentIndent = calculateCurrentIndent(state.indentLevel, lineIndentDelta);
 
-		line = formatLineSpacing(trimmed);
-		result.push(indent.repeat(Math.max(0, currentIndent)) + line);
+		const isContinuation = /^(->|=>|\?->|\.|&&|\|\||,)/.test(trimmed);
+		const continuationIndent = isContinuation ? 1 : 0;
 
-		state.indentLevel = Math.max(0, state.indentLevel + lineIndentDelta.after);
+		line = formatLineSpacing(trimmed);
+		result.push(indent.repeat(Math.max(0, currentIndent + continuationIndent)) + line);
+
+		state.indentLevel = Math.max(0, state.indentLevel + lineIndentDelta.before + lineIndentDelta.after);
 	}
 
 	let formatted = result.join('\n');
@@ -285,21 +289,79 @@ function stripStringsAndComments(line: string): string {
 	return result;
 }
 
+function extractStrings(input: string): { template: string; strings: string[] } {
+	const strings: string[] = [];
+	let template = '';
+	let i = 0;
+
+	while (i < input.length) {
+		const char = input[i];
+
+		if (char === '"' || char === "'") {
+			const quote = char;
+			let str = quote;
+			i++;
+
+			while (i < input.length) {
+				const c = input[i];
+				str += c;
+				if (c === '\\' && i + 1 < input.length) {
+					i++;
+					str += input[i];
+				} else if (c === quote) {
+					break;
+				}
+				i++;
+			}
+
+			template += `__STR${strings.length}__`;
+			strings.push(str);
+		} else {
+			template += char;
+		}
+		i++;
+	}
+
+	return { template, strings };
+}
+
+function restoreStrings(template: string, strings: string[]): string {
+	return template.replace(/__STR(\d+)__/g, (_, idx) => strings[Number.parseInt(idx, 10)] ?? '');
+}
+
 function formatLineSpacing(input: string): string {
-	let result = input.replace(/\s+/g, ' ');
+	let phpTag = '';
+	let rest = input;
+
+	const phpTagMatch = input.match(/^(<\?php\s*|<\?=\s*|<\?\s*)/);
+	if (phpTagMatch) {
+		phpTag = `${phpTagMatch[1].trimEnd()} `;
+		rest = input.slice(phpTagMatch[1].length);
+		if (rest === '') return phpTag.trimEnd();
+	}
+
+	if (rest.includes('<<<')) {
+		return phpTag + rest.trim();
+	}
+
+	const { template, strings } = extractStrings(rest);
+
+	let result = template.replace(/\s+/g, ' ');
 
 	result = result.replace(/\s*->\s*/g, '->');
 	result = result.replace(/\s*\?->\s*/g, '?->');
 	result = result.replace(/\s*::\s*/g, '::');
 
 	result = result.replace(
-		/\s*(===|!==|<=>|<>|<=|>=|<<|>>|\?\?=|\?\?|\.=|\+=|-=|\*=|\/=|%=|&=|\|=|\^=|==|!=|&&|\|\|)\s*/g,
+		/\s*(\.\=|===|!==|<=>|<>|<=|>=|<<|>>|\?\?=|\?\?|\+=|-=|\*=|\/=|%=|&=|\|=|\^=|==|!=|&&|\|\|)\s*/g,
 		' $1 ',
 	);
-	result = result.replace(/\s*([=])\s*/g, ' $1 ');
-	result = result.replace(/(?<!-)([<>])(?!-)/g, ' $1 ');
-	result = result.replace(/ {2}([<>]) {2}/g, ' $1 ');
-	result = result.replace(/\s*\+\s*/g, ' + ');
+
+	result = result.replace(/\s*(\.\.\.)\s*/g, ' $1');
+
+	result = result.replace(/(?<![=!<>.])\s*=\s*(?![=<>])/g, ' = ');
+
+	result = result.replace(/(?<![+])\+(?![+=])/g, ' + ');
 
 	result = result.replace(/\s*,\s*/g, ', ');
 	result = result.replace(/\s*;\s*/g, ';');
@@ -315,7 +377,11 @@ function formatLineSpacing(input: string): string {
 	result = result.replace(/\s+;/g, ';');
 	result = result.replace(/\s+,/g, ',');
 
-	return result.trim();
+	result = result.replace(/ {2,}/g, ' ');
+
+	result = restoreStrings(result, strings);
+
+	return phpTag + result.trim();
 }
 
 function normalizeBlankLines(input: string): string {
