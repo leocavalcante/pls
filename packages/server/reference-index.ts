@@ -385,7 +385,7 @@ export class ReferenceIndex {
 				break;
 			case 'TernaryExpression':
 				this.indexExpression(uri, expr.test, refs, caller);
-				this.indexExpression(uri, expr.consequent, refs, caller);
+				if (expr.consequent) this.indexExpression(uri, expr.consequent, refs, caller);
 				this.indexExpression(uri, expr.alternate, refs, caller);
 				break;
 			case 'ArrayExpression':
