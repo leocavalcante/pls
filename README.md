@@ -34,6 +34,8 @@ When you use [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/co
 | **Rename Symbol** | Safe refactoring with prepare/rename support |
 | **Code Actions** | Quick fixes and refactoring suggestions |
 | **Diagnostics** | Parse errors and warnings |
+| **Linter** | Built-in code quality checks |
+| **Formatter** | Opinionated PHP code formatter |
 | **Type Hierarchy** | Explore class inheritance trees |
 | **Call Hierarchy** | Trace incoming and outgoing calls |
 | **Document Highlights** | Highlight occurrences of a symbol |
@@ -42,6 +44,19 @@ When you use [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/co
 | **Folding Ranges** | Collapse code blocks |
 | **Document Links** | Clickable paths in require/include |
 | **Formatting** | Code formatting (document and range) |
+
+## 🎨 Formatter
+
+PLS includes a built-in opinionated PHP formatter. It handles:
+
+- **Operator spacing**: Consistent spaces around `=`, `===`, `.=`, `->`, `::`, etc.
+- **Brace style**: K&R style with space before opening brace
+- **Indentation**: Configurable tabs or spaces
+- **Method chaining**: Proper indentation for fluent interfaces
+- **Heredocs**: Preserved exactly as written
+- **String literals**: Content never modified
+
+The formatter respects your editor's settings for tab size and spaces vs tabs.
 
 ## 📦 Installation
 
