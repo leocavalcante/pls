@@ -79,6 +79,156 @@ function visitProgram(program: Program, builder: SemanticTokensBuilder): void {
 	}
 }
 
+function visitNamespaceStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'NamespaceStatement') return;
+	if (statement.name) {
+		emitToken(
+			builder,
+			statement.name,
+			getTokenType('namespace'),
+			getTokenModifiers(['declaration']),
+		);
+	}
+	if (statement.body) {
+		for (const stmt of statement.body) {
+			visitStatement(stmt, builder);
+		}
+	}
+}
+
+function visitBlockStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'BlockStatement') return;
+	for (const stmt of statement.statements) {
+		visitStatement(stmt, builder);
+	}
+}
+
+function visitExpressionStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'ExpressionStatement') return;
+	visitExpression(statement.expression, builder);
+}
+
+function visitReturnStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'ReturnStatement') return;
+	if (statement.argument) {
+		visitExpression(statement.argument, builder);
+	}
+}
+
+function visitEchoStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'EchoStatement') return;
+	for (const expr of statement.expressions) {
+		visitExpression(expr, builder);
+	}
+}
+
+function visitIfStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'IfStatement') return;
+	visitExpression(statement.test, builder);
+	visitStatement(statement.consequent, builder);
+	if (statement.alternate) {
+		visitStatement(statement.alternate, builder);
+	}
+}
+
+function visitLoopStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind === 'WhileStatement' || statement.kind === 'DoWhileStatement') {
+		visitExpression(statement.test, builder);
+		visitStatement(statement.body, builder);
+	}
+}
+
+function visitForStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'ForStatement') return;
+	for (const expr of [...statement.init, ...statement.test, ...statement.update]) {
+		visitExpression(expr, builder);
+	}
+	visitStatement(statement.body, builder);
+}
+
+function visitForeachStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'ForeachStatement') return;
+	visitExpression(statement.source, builder);
+	if (statement.key) {
+		visitExpression(statement.key, builder);
+	}
+	visitExpression(statement.value, builder);
+	visitStatement(statement.body, builder);
+}
+
+function visitSwitchStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'SwitchStatement') return;
+	visitExpression(statement.discriminant, builder);
+	for (const switchCase of statement.cases) {
+		if (switchCase.test) {
+			visitExpression(switchCase.test, builder);
+		}
+		for (const stmt of switchCase.consequent) {
+			visitStatement(stmt, builder);
+		}
+	}
+}
+
+function visitTryStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'TryStatement') return;
+	visitStatement(statement.block, builder);
+	for (const catchClause of statement.catches) {
+		for (const type of catchClause.types) {
+			emitToken(builder, type, getTokenType('class'), 0);
+		}
+		if (catchClause.variable) {
+			emitToken(builder, catchClause.variable, getTokenType('variable'), 0);
+		}
+		visitStatement(catchClause.body, builder);
+	}
+	if (statement.finalizer) {
+		visitStatement(statement.finalizer, builder);
+	}
+}
+
+function visitThrowStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'ThrowStatement') return;
+	visitExpression(statement.argument, builder);
+}
+
+function visitConstStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'ConstStatement') return;
+	for (const decl of statement.declarations) {
+		emitToken(
+			builder,
+			decl.name,
+			getTokenType('variable'),
+			getTokenModifiers(['declaration', 'readonly']),
+		);
+		visitExpression(decl.value, builder);
+	}
+}
+
+function visitGlobalStatementNode(statement: Statement, builder: SemanticTokensBuilder): void {
+	if (statement.kind !== 'GlobalStatement') return;
+	for (const variable of statement.variables) {
+		emitToken(builder, variable, getTokenType('variable'), 0);
+	}
+}
+
+function visitStaticVariableStatementNode(
+	statement: Statement,
+	builder: SemanticTokensBuilder,
+): void {
+	if (statement.kind !== 'StaticVariableStatement') return;
+	for (const decl of statement.declarations) {
+		emitToken(
+			builder,
+			decl.name,
+			getTokenType('variable'),
+			getTokenModifiers(['declaration', 'static']),
+		);
+		if (decl.defaultValue) {
+			visitExpression(decl.defaultValue, builder);
+		}
+	}
+}
+
 function visitStatement(statement: Statement, builder: SemanticTokensBuilder): void {
 	switch (statement.kind) {
 		case 'FunctionDeclaration':
@@ -97,121 +247,50 @@ function visitStatement(statement: Statement, builder: SemanticTokensBuilder): v
 			visitEnumDeclaration(statement, builder);
 			break;
 		case 'NamespaceStatement':
-			if (statement.name) {
-				emitToken(
-					builder,
-					statement.name,
-					getTokenType('namespace'),
-					getTokenModifiers(['declaration']),
-				);
-			}
-			if (statement.body) {
-				for (const stmt of statement.body) {
-					visitStatement(stmt, builder);
-				}
-			}
+			visitNamespaceStatementNode(statement, builder);
 			break;
 		case 'BlockStatement':
-			for (const stmt of statement.statements) {
-				visitStatement(stmt, builder);
-			}
+			visitBlockStatementNode(statement, builder);
 			break;
 		case 'ExpressionStatement':
-			visitExpression(statement.expression, builder);
+			visitExpressionStatementNode(statement, builder);
 			break;
 		case 'ReturnStatement':
-			if (statement.argument) {
-				visitExpression(statement.argument, builder);
-			}
+			visitReturnStatementNode(statement, builder);
 			break;
 		case 'EchoStatement':
-			for (const expr of statement.expressions) {
-				visitExpression(expr, builder);
-			}
+			visitEchoStatementNode(statement, builder);
 			break;
 		case 'IfStatement':
-			visitExpression(statement.test, builder);
-			visitStatement(statement.consequent, builder);
-			if (statement.alternate) {
-				visitStatement(statement.alternate, builder);
-			}
+			visitIfStatementNode(statement, builder);
 			break;
 		case 'WhileStatement':
 		case 'DoWhileStatement':
-			visitExpression(statement.test, builder);
-			visitStatement(statement.body, builder);
+			visitLoopStatementNode(statement, builder);
 			break;
 		case 'ForStatement':
-			for (const expr of [...statement.init, ...statement.test, ...statement.update]) {
-				visitExpression(expr, builder);
-			}
-			visitStatement(statement.body, builder);
+			visitForStatementNode(statement, builder);
 			break;
 		case 'ForeachStatement':
-			visitExpression(statement.source, builder);
-			if (statement.key) {
-				visitExpression(statement.key, builder);
-			}
-			visitExpression(statement.value, builder);
-			visitStatement(statement.body, builder);
+			visitForeachStatementNode(statement, builder);
 			break;
 		case 'SwitchStatement':
-			visitExpression(statement.discriminant, builder);
-			for (const switchCase of statement.cases) {
-				if (switchCase.test) {
-					visitExpression(switchCase.test, builder);
-				}
-				for (const stmt of switchCase.consequent) {
-					visitStatement(stmt, builder);
-				}
-			}
+			visitSwitchStatementNode(statement, builder);
 			break;
 		case 'TryStatement':
-			visitStatement(statement.block, builder);
-			for (const catchClause of statement.catches) {
-				for (const type of catchClause.types) {
-					emitToken(builder, type, getTokenType('class'), 0);
-				}
-				if (catchClause.variable) {
-					emitToken(builder, catchClause.variable, getTokenType('variable'), 0);
-				}
-				visitStatement(catchClause.body, builder);
-			}
-			if (statement.finalizer) {
-				visitStatement(statement.finalizer, builder);
-			}
+			visitTryStatementNode(statement, builder);
 			break;
 		case 'ThrowStatement':
-			visitExpression(statement.argument, builder);
+			visitThrowStatementNode(statement, builder);
 			break;
 		case 'ConstStatement':
-			for (const decl of statement.declarations) {
-				emitToken(
-					builder,
-					decl.name,
-					getTokenType('variable'),
-					getTokenModifiers(['declaration', 'readonly']),
-				);
-				visitExpression(decl.value, builder);
-			}
+			visitConstStatementNode(statement, builder);
 			break;
 		case 'GlobalStatement':
-			for (const variable of statement.variables) {
-				emitToken(builder, variable, getTokenType('variable'), 0);
-			}
+			visitGlobalStatementNode(statement, builder);
 			break;
 		case 'StaticVariableStatement':
-			for (const decl of statement.declarations) {
-				emitToken(
-					builder,
-					decl.name,
-					getTokenType('variable'),
-					getTokenModifiers(['declaration', 'static']),
-				);
-				if (decl.defaultValue) {
-					visitExpression(decl.defaultValue, builder);
-				}
-			}
+			visitStaticVariableStatementNode(statement, builder);
 			break;
 	}
 }
@@ -392,208 +471,374 @@ function visitParameter(param: Parameter, builder: SemanticTokensBuilder): void 
 	}
 }
 
+function visitVariableExpression(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind === 'Variable') {
+		emitToken(builder, expr, getTokenType('variable'), 0);
+	}
+}
+
+function visitIdentifierExpression(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind === 'Identifier') {
+		emitToken(builder, expr, getTokenType('class'), 0);
+	}
+}
+
+function visitCallExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'CallExpression') return;
+	if (expr.callee.kind === 'Identifier') {
+		emitToken(builder, expr.callee, getTokenType('function'), 0);
+	} else {
+		visitExpression(expr.callee, builder);
+	}
+	for (const arg of expr.arguments) {
+		visitExpression(arg.value, builder);
+	}
+}
+
+function visitMethodCallExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'MethodCallExpression') return;
+	visitExpression(expr.object, builder);
+	if (expr.property.kind === 'Identifier') {
+		emitToken(builder, expr.property, getTokenType('method'), 0);
+	}
+	for (const arg of expr.arguments) {
+		visitExpression(arg.value, builder);
+	}
+}
+
+function visitStaticCallExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'StaticCallExpression') return;
+	if (expr.class.kind === 'Identifier') {
+		emitToken(builder, expr.class, getTokenType('class'), 0);
+	} else {
+		visitExpression(expr.class, builder);
+	}
+	if (expr.method.kind === 'Identifier') {
+		emitToken(builder, expr.method, getTokenType('method'), getTokenModifiers(['static']));
+	}
+	for (const arg of expr.arguments) {
+		visitExpression(arg.value, builder);
+	}
+}
+
+function visitPropertyAccessExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'PropertyAccessExpression') return;
+	visitExpression(expr.object, builder);
+	if (expr.property.kind === 'Identifier') {
+		emitToken(builder, expr.property, getTokenType('property'), 0);
+	}
+}
+
+function visitStaticPropertyAccessExpressionNode(
+	expr: Expression,
+	builder: SemanticTokensBuilder,
+): void {
+	if (expr.kind !== 'StaticPropertyAccessExpression') return;
+	if (expr.class.kind === 'Identifier') {
+		emitToken(builder, expr.class, getTokenType('class'), 0);
+	} else {
+		visitExpression(expr.class, builder);
+	}
+	if (expr.property.kind === 'Variable') {
+		emitToken(builder, expr.property, getTokenType('property'), getTokenModifiers(['static']));
+	}
+}
+
+function visitNewExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'NewExpression') return;
+	if (expr.class.kind === 'Identifier') {
+		emitToken(builder, expr.class, getTokenType('class'), 0);
+	} else {
+		visitExpression(expr.class, builder);
+	}
+	for (const arg of expr.arguments) {
+		visitExpression(arg.value, builder);
+	}
+}
+
+function visitArrayExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'ArrayExpression') return;
+	for (const element of expr.items) {
+		if (!element) continue;
+		if (element.key) {
+			visitExpression(element.key, builder);
+		}
+		visitExpression(element.value, builder);
+	}
+}
+
+function visitBinaryExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind === 'BinaryExpression' || expr.kind === 'NullCoalesceExpression') {
+		visitExpression(expr.left, builder);
+		visitExpression(expr.right, builder);
+	}
+}
+
+function visitUnaryExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'UnaryExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitAssignmentExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'AssignmentExpression') return;
+	visitExpression(expr.left, builder);
+	visitExpression(expr.right, builder);
+}
+
+function visitTernaryExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'TernaryExpression') return;
+	visitExpression(expr.test, builder);
+	visitExpression(expr.consequent, builder);
+	if (expr.alternate) {
+		visitExpression(expr.alternate, builder);
+	}
+}
+
+function visitInstanceofExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'InstanceofExpression') return;
+	visitExpression(expr.left, builder);
+	if (expr.right.kind === 'Identifier') {
+		emitToken(builder, expr.right, getTokenType('class'), 0);
+	} else {
+		visitExpression(expr.right, builder);
+	}
+}
+
+function visitArrayAccessExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'ArrayAccessExpression') return;
+	visitExpression(expr.array, builder);
+	if (expr.index) {
+		visitExpression(expr.index, builder);
+	}
+}
+
+function visitCloneExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'CloneExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitPrintExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'PrintExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitExitExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'ExitExpression') return;
+	if (expr.argument) {
+		visitExpression(expr.argument, builder);
+	}
+}
+
+function visitEmptyExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'EmptyExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitEvalExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'EvalExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitIssetExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'IssetExpression') return;
+	for (const arg of expr.arguments) {
+		visitExpression(arg, builder);
+	}
+}
+
+function visitUnsetExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'UnsetExpression') return;
+	for (const arg of expr.arguments) {
+		visitExpression(arg, builder);
+	}
+}
+
+function visitListExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'ListExpression') return;
+	for (const item of expr.items) {
+		if (item.key) {
+			visitExpression(item.key, builder);
+		}
+		if (item.value) {
+			visitExpression(item.value, builder);
+		}
+	}
+}
+
+function visitYieldExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'YieldExpression') return;
+	if (expr.key) {
+		visitExpression(expr.key, builder);
+	}
+	if (expr.value) {
+		visitExpression(expr.value, builder);
+	}
+}
+
+function visitYieldFromExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'YieldFromExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitFunctionExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'ArrowFunction' && expr.kind !== 'ClosureExpression') return;
+	for (const param of expr.params) {
+		visitParameter(param, builder);
+	}
+	if (expr.kind === 'ClosureExpression') {
+		for (const use of expr.uses) {
+			emitToken(builder, use.variable, getTokenType('variable'), 0);
+		}
+	}
+	if (expr.body.kind === 'BlockStatement') {
+		visitStatement(expr.body, builder);
+	} else {
+		visitExpression(expr.body, builder);
+	}
+}
+
+function visitMatchExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'MatchExpression') return;
+	visitExpression(expr.condition, builder);
+	for (const arm of expr.arms) {
+		if (arm.conditions) {
+			for (const condition of arm.conditions) {
+				visitExpression(condition, builder);
+			}
+		}
+		visitExpression(arm.body, builder);
+	}
+}
+
+function visitThrowExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'ThrowExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitIncludeExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'IncludeExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitParenthesizedExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'ParenthesizedExpression') return;
+	visitExpression(expr.expression, builder);
+}
+
+function visitCastExpressionNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'CastExpression') return;
+	visitExpression(expr.argument, builder);
+}
+
+function visitInterpolatedStringNode(expr: Expression, builder: SemanticTokensBuilder): void {
+	if (expr.kind !== 'InterpolatedString') return;
+	for (const part of expr.parts) {
+		if (typeof part !== 'object' || !('kind' in part)) {
+			continue;
+		}
+		visitExpression(part, builder);
+	}
+}
+
 function visitExpression(expr: Expression, builder: SemanticTokensBuilder): void {
 	switch (expr.kind) {
 		case 'Variable':
-			emitToken(builder, expr, getTokenType('variable'), 0);
+			visitVariableExpression(expr, builder);
 			break;
 		case 'Identifier':
-			emitToken(builder, expr, getTokenType('class'), 0);
+			visitIdentifierExpression(expr, builder);
 			break;
 		case 'CallExpression':
-			if (expr.callee.kind === 'Identifier') {
-				emitToken(builder, expr.callee, getTokenType('function'), 0);
-			} else {
-				visitExpression(expr.callee, builder);
-			}
-			for (const arg of expr.arguments) {
-				visitExpression(arg.value, builder);
-			}
+			visitCallExpressionNode(expr, builder);
 			break;
 		case 'MethodCallExpression':
-			visitExpression(expr.object, builder);
-			if (expr.property.kind === 'Identifier') {
-				emitToken(builder, expr.property, getTokenType('method'), 0);
-			}
-			for (const arg of expr.arguments) {
-				visitExpression(arg.value, builder);
-			}
+			visitMethodCallExpressionNode(expr, builder);
 			break;
 		case 'StaticCallExpression':
-			if (expr.class.kind === 'Identifier') {
-				emitToken(builder, expr.class, getTokenType('class'), 0);
-			} else {
-				visitExpression(expr.class, builder);
-			}
-			if (expr.method.kind === 'Identifier') {
-				emitToken(builder, expr.method, getTokenType('method'), getTokenModifiers(['static']));
-			}
-			for (const arg of expr.arguments) {
-				visitExpression(arg.value, builder);
-			}
+			visitStaticCallExpressionNode(expr, builder);
 			break;
 		case 'PropertyAccessExpression':
-			visitExpression(expr.object, builder);
-			if (expr.property.kind === 'Identifier') {
-				emitToken(builder, expr.property, getTokenType('property'), 0);
-			}
+			visitPropertyAccessExpressionNode(expr, builder);
 			break;
 		case 'StaticPropertyAccessExpression':
-			if (expr.class.kind === 'Identifier') {
-				emitToken(builder, expr.class, getTokenType('class'), 0);
-			} else {
-				visitExpression(expr.class, builder);
-			}
-			if (expr.property.kind === 'Variable') {
-				emitToken(builder, expr.property, getTokenType('property'), getTokenModifiers(['static']));
-			}
+			visitStaticPropertyAccessExpressionNode(expr, builder);
 			break;
 		case 'NewExpression':
-			if (expr.class.kind === 'Identifier') {
-				emitToken(builder, expr.class, getTokenType('class'), 0);
-			} else {
-				visitExpression(expr.class, builder);
-			}
-			for (const arg of expr.arguments) {
-				visitExpression(arg.value, builder);
-			}
+			visitNewExpressionNode(expr, builder);
 			break;
 		case 'ArrayExpression':
-			for (const element of expr.items) {
-				if (!element) continue;
-				if (element.key) {
-					visitExpression(element.key, builder);
-				}
-				visitExpression(element.value, builder);
-			}
+			visitArrayExpressionNode(expr, builder);
 			break;
 		case 'BinaryExpression':
 		case 'NullCoalesceExpression':
-			visitExpression(expr.left, builder);
-			visitExpression(expr.right, builder);
+			visitBinaryExpressionNode(expr, builder);
 			break;
 		case 'UnaryExpression':
-			visitExpression(expr.argument, builder);
+			visitUnaryExpressionNode(expr, builder);
 			break;
 		case 'AssignmentExpression':
-			visitExpression(expr.left, builder);
-			visitExpression(expr.right, builder);
+			visitAssignmentExpressionNode(expr, builder);
 			break;
 		case 'TernaryExpression':
-			visitExpression(expr.test, builder);
-			visitExpression(expr.consequent, builder);
-			if (expr.alternate) {
-				visitExpression(expr.alternate, builder);
-			}
+			visitTernaryExpressionNode(expr, builder);
 			break;
 		case 'InstanceofExpression':
-			visitExpression(expr.left, builder);
-			if (expr.right.kind === 'Identifier') {
-				emitToken(builder, expr.right, getTokenType('class'), 0);
-			} else {
-				visitExpression(expr.right, builder);
-			}
+			visitInstanceofExpressionNode(expr, builder);
 			break;
 		case 'ArrayAccessExpression':
-			visitExpression(expr.array, builder);
-			if (expr.index) {
-				visitExpression(expr.index, builder);
-			}
+			visitArrayAccessExpressionNode(expr, builder);
 			break;
 		case 'CloneExpression':
-			visitExpression(expr.argument, builder);
+			visitCloneExpressionNode(expr, builder);
 			break;
 		case 'PrintExpression':
-			visitExpression(expr.argument, builder);
+			visitPrintExpressionNode(expr, builder);
 			break;
 		case 'ExitExpression':
-			if (expr.argument) {
-				visitExpression(expr.argument, builder);
-			}
+			visitExitExpressionNode(expr, builder);
 			break;
 		case 'EmptyExpression':
-			visitExpression(expr.argument, builder);
+			visitEmptyExpressionNode(expr, builder);
 			break;
 		case 'EvalExpression':
-			visitExpression(expr.argument, builder);
+			visitEvalExpressionNode(expr, builder);
 			break;
 		case 'IssetExpression':
-			for (const arg of expr.arguments) {
-				visitExpression(arg, builder);
-			}
+			visitIssetExpressionNode(expr, builder);
 			break;
 		case 'UnsetExpression':
-			for (const arg of expr.arguments) {
-				visitExpression(arg, builder);
-			}
+			visitUnsetExpressionNode(expr, builder);
 			break;
 		case 'ListExpression':
-			for (const item of expr.items) {
-				if (item.key) {
-					visitExpression(item.key, builder);
-				}
-				if (item.value) {
-					visitExpression(item.value, builder);
-				}
-			}
+			visitListExpressionNode(expr, builder);
 			break;
 		case 'YieldExpression':
-			if (expr.key) {
-				visitExpression(expr.key, builder);
-			}
-			if (expr.value) {
-				visitExpression(expr.value, builder);
-			}
+			visitYieldExpressionNode(expr, builder);
 			break;
 		case 'YieldFromExpression':
-			visitExpression(expr.argument, builder);
+			visitYieldFromExpressionNode(expr, builder);
 			break;
 		case 'ArrowFunction':
 		case 'ClosureExpression':
-			for (const param of expr.params) {
-				visitParameter(param, builder);
-			}
-			if (expr.kind === 'ClosureExpression') {
-				for (const use of expr.uses) {
-					emitToken(builder, use.variable, getTokenType('variable'), 0);
-				}
-			}
-			if (expr.body.kind === 'BlockStatement') {
-				visitStatement(expr.body, builder);
-			} else {
-				visitExpression(expr.body, builder);
-			}
+			visitFunctionExpressionNode(expr, builder);
 			break;
 		case 'MatchExpression':
-			visitExpression(expr.condition, builder);
-			for (const arm of expr.arms) {
-				if (arm.conditions) {
-					for (const condition of arm.conditions) {
-						visitExpression(condition, builder);
-					}
-				}
-				visitExpression(arm.body, builder);
-			}
+			visitMatchExpressionNode(expr, builder);
 			break;
 		case 'ThrowExpression':
-			visitExpression(expr.argument, builder);
+			visitThrowExpressionNode(expr, builder);
 			break;
 		case 'IncludeExpression':
-			visitExpression(expr.argument, builder);
+			visitIncludeExpressionNode(expr, builder);
 			break;
 		case 'ParenthesizedExpression':
-			visitExpression(expr.expression, builder);
+			visitParenthesizedExpressionNode(expr, builder);
 			break;
 		case 'CastExpression':
-			visitExpression(expr.argument, builder);
+			visitCastExpressionNode(expr, builder);
 			break;
 		case 'InterpolatedString':
-			for (const part of expr.parts) {
-				if (typeof part !== 'object' || !('kind' in part)) {
-					continue;
-				}
-				visitExpression(part, builder);
-			}
+			visitInterpolatedStringNode(expr, builder);
 			break;
 	}
 }
