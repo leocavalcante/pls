@@ -9,6 +9,40 @@ import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { DefinitionIndex } from '../definition-index';
 import { getWordAtPosition, getWordRangeAtPosition } from '../position-utils';
 
+type RenameType = 'property' | 'variable' | 'symbol';
+
+function detectRenameType(text: string, position: { line: number; character: number }): RenameType {
+	const lines = text.split('\n');
+	const line = lines[position.line];
+	if (!line) return 'variable';
+
+	const beforeCursor = line.slice(0, position.character);
+	const afterCursor = line.slice(position.character);
+
+	if (/->[\s]*$/.test(beforeCursor)) {
+		return 'property';
+	}
+
+	if (/^\s*(private|protected|public)\s+(readonly\s+)?(\?\s*)?[a-zA-Z_\\]+\s+\$/.test(line)) {
+		return 'property';
+	}
+
+	const wordMatch = afterCursor.match(/^[a-zA-Z_][a-zA-Z0-9_]*/);
+	if (wordMatch) {
+		const word = wordMatch[0];
+		const fullLine = line;
+		if (new RegExp(`\\$this\\s*->\\s*${word}\\b`).test(fullLine)) {
+			return 'property';
+		}
+	}
+
+	if (/\$[a-zA-Z_]/.test(beforeCursor.slice(-2) + afterCursor.slice(0, 1))) {
+		return 'variable';
+	}
+
+	return 'symbol';
+}
+
 export function createPrepareRenameHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	index: DefinitionIndex,
@@ -21,9 +55,13 @@ export function createPrepareRenameHandler(
 		const word = getWordAtPosition(text, params.position);
 		if (!word) return null;
 
-		const name = word.startsWith('$') ? word.slice(1) : word;
-		const definition = index.findDefinition(name);
-		if (!definition) return null;
+		const isVariable = word.startsWith('$');
+		const name = isVariable ? word.slice(1) : word;
+
+		if (!isVariable) {
+			const definition = index.findDefinition(name);
+			if (!definition) return null;
+		}
 
 		const range = getWordRangeAtPosition(text, params.position);
 		if (!range) return null;
@@ -33,14 +71,17 @@ export function createPrepareRenameHandler(
 }
 
 interface RenameContext {
-	isVariable: boolean;
+	renameType: RenameType;
 	name: string;
 	newName: string;
-	searchPattern: string;
-	replacement: string;
+	searchPatterns: { pattern: string; replacement: string }[];
 }
 
-function createRenameContext(word: string, newName: string): RenameContext | null {
+function createRenameContext(
+	word: string,
+	newName: string,
+	renameType: RenameType,
+): RenameContext | null {
 	const isVariable = word.startsWith('$');
 	const name = isVariable ? word.slice(1) : word;
 	const normalizedNewName = newName.startsWith('$') ? newName.slice(1) : newName;
@@ -49,15 +90,34 @@ function createRenameContext(word: string, newName: string): RenameContext | nul
 		return null;
 	}
 
-	const searchPattern = isVariable ? `\\$${name}\\b` : `\\b${name}\\b`;
-	const replacement = isVariable ? `$${normalizedNewName}` : normalizedNewName;
+	const searchPatterns: { pattern: string; replacement: string }[] = [];
+
+	if (renameType === 'property') {
+		searchPatterns.push({
+			pattern: `(->\\s*)${name}\\b`,
+			replacement: `$1${normalizedNewName}`,
+		});
+		searchPatterns.push({
+			pattern: `((?:private|protected|public)\\s+(?:readonly\\s+)?(?:\\?\\s*)?[a-zA-Z_\\\\]+\\s+)\\$${name}\\b`,
+			replacement: `$1$${normalizedNewName}`,
+		});
+	} else if (renameType === 'variable') {
+		searchPatterns.push({
+			pattern: `\\$${name}\\b`,
+			replacement: `$${normalizedNewName}`,
+		});
+	} else {
+		searchPatterns.push({
+			pattern: `\\b${name}\\b`,
+			replacement: normalizedNewName,
+		});
+	}
 
 	return {
-		isVariable,
+		renameType,
 		name,
 		newName: normalizedNewName,
-		searchPattern,
-		replacement,
+		searchPatterns,
 	};
 }
 
@@ -74,20 +134,19 @@ export function createRenameHandler(
 		const word = getWordAtPosition(text, params.position);
 		if (!word) return null;
 
-		const context = createRenameContext(word, params.newName);
+		const renameType = detectRenameType(text, params.position);
+		const context = createRenameContext(word, params.newName, renameType);
 		if (!context) return null;
 
 		const definition = index.findDefinition(context.name);
-		if (!definition && !context.isVariable) {
+		if (!definition && context.renameType === 'symbol') {
 			return null;
 		}
 
-		const regex = new RegExp(context.searchPattern, 'g');
 		return buildWorkspaceEdit(
 			getAllDocuments(),
-			regex,
-			context.replacement,
-			context.isVariable,
+			context.searchPatterns,
+			context.renameType,
 			context.name,
 		);
 	};
@@ -101,14 +160,16 @@ interface TextEditMatch {
 	lineNum: number;
 	index: number;
 	length: number;
+	replacement: string;
 }
 
 function collectMatchesInLine(
 	line: string,
 	lineNum: number,
 	regex: RegExp,
+	replacement: string,
 	docText: string,
-	isVariable: boolean,
+	renameType: RenameType,
 	name: string,
 ): TextEditMatch[] {
 	const results: TextEditMatch[] = [];
@@ -116,41 +177,57 @@ function collectMatchesInLine(
 	for (const match of line.matchAll(regex)) {
 		if (match.index === undefined) continue;
 
-		if (isVariable || isSymbolReference(docText, lineNum, match.index, name)) {
-			results.push({
-				lineNum,
-				index: match.index,
-				length: match[0].length,
-			});
+		if (renameType === 'symbol' && !isSymbolReference(docText, lineNum, match.index, name)) {
+			continue;
 		}
+
+		const actualReplacement = applyMatchGroups(replacement, match);
+
+		results.push({
+			lineNum,
+			index: match.index,
+			length: match[0].length,
+			replacement: actualReplacement,
+		});
 	}
 
 	return results;
 }
 
+function applyMatchGroups(replacement: string, match: RegExpMatchArray): string {
+	let result = replacement;
+	for (let i = 1; i < match.length; i++) {
+		result = result.replace(new RegExp(`\\$${i}`, 'g'), match[i] || '');
+	}
+	return result;
+}
+
 function createTextEditsForDocument(
 	doc: TextDocument,
-	regex: RegExp,
-	replacement: string,
-	isVariable: boolean,
+	searchPatterns: { pattern: string; replacement: string }[],
+	renameType: RenameType,
 	name: string,
 ): TextEdit[] {
 	const docText = doc.getText();
 	const lines = docText.split('\n');
 	const edits: TextEdit[] = [];
 
-	for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-		const line = lines[lineNum];
-		const matches = collectMatchesInLine(line, lineNum, regex, docText, isVariable, name);
+	for (const { pattern, replacement } of searchPatterns) {
+		const regex = new RegExp(pattern, 'g');
 
-		for (const match of matches) {
-			edits.push({
-				range: {
-					start: { line: match.lineNum, character: match.index },
-					end: { line: match.lineNum, character: match.index + match.length },
-				},
-				newText: replacement,
-			});
+		for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+			const line = lines[lineNum];
+			const matches = collectMatchesInLine(line, lineNum, regex, replacement, docText, renameType, name);
+
+			for (const match of matches) {
+				edits.push({
+					range: {
+						start: { line: match.lineNum, character: match.index },
+						end: { line: match.lineNum, character: match.index + match.length },
+					},
+					newText: match.replacement,
+				});
+			}
 		}
 	}
 
@@ -159,15 +236,14 @@ function createTextEditsForDocument(
 
 function buildWorkspaceEdit(
 	documents: TextDocument[],
-	regex: RegExp,
-	replacement: string,
-	isVariable: boolean,
+	searchPatterns: { pattern: string; replacement: string }[],
+	renameType: RenameType,
 	name: string,
 ): WorkspaceEdit | null {
 	const changes: Record<string, TextEdit[]> = {};
 
 	for (const doc of documents) {
-		const edits = createTextEditsForDocument(doc, regex, replacement, isVariable, name);
+		const edits = createTextEditsForDocument(doc, searchPatterns, renameType, name);
 
 		if (edits.length > 0) {
 			changes[doc.uri] = edits;
