@@ -539,12 +539,17 @@ function parseQualifiedName(ctx: ParserContext): Identifier {
 		name = '\\';
 	}
 
-	name += ctx.expect(TokenType.Identifier, 'Expected identifier').value;
+	const next = ctx.current();
+	if (next.type === TokenType.Identifier || ctx.isKeywordAsIdentifier()) {
+		name += ctx.advance().value;
+	} else {
+		throw ctx.error('Expected identifier');
+	}
 
 	while (ctx.match(TokenType.Backslash)) {
 		name += '\\';
-		const next = ctx.current();
-		if (next.type === TokenType.Identifier || ctx.isKeywordAsIdentifier()) {
+		const curr = ctx.current();
+		if (curr.type === TokenType.Identifier || ctx.isKeywordAsIdentifier()) {
 			name += ctx.advance().value;
 		} else {
 			break;
@@ -756,6 +761,15 @@ function tryParseKeywordExpression(
 	return null;
 }
 
+function isIncludeToken(ctx: ParserContext): boolean {
+	return (
+		ctx.check(TokenType.Include) ||
+		ctx.check(TokenType.IncludeOnce) ||
+		ctx.check(TokenType.Require) ||
+		ctx.check(TokenType.RequireOnce)
+	);
+}
+
 export function parsePrimaryExpression(
 	ctx: ParserContext,
 	parseExpression: () => Expression,
@@ -797,6 +811,10 @@ export function parsePrimaryExpression(
 	const keywordExpr = tryParseKeywordExpression(ctx, parseExpression);
 	if (keywordExpr) {
 		return keywordExpr;
+	}
+
+	if (isIncludeToken(ctx)) {
+		return expr.parseIncludeExpression();
 	}
 
 	throw ctx.error('Unexpected token');

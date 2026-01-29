@@ -165,6 +165,14 @@ describe('Parser - Statements', () => {
 				expect(stmt.expression.type).toBe('require_once');
 			}
 		});
+
+		test('parses require_once as expression in assignment', () => {
+			const ast = parser.parse("<?php $settings = require_once 'file.php';");
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'AssignmentExpression') {
+				expect(stmt.expression.right.kind).toBe('IncludeExpression');
+			}
+		});
 	});
 
 	describe('inline HTML', () => {
