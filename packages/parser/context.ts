@@ -6,7 +6,14 @@ export class ParserContext {
 	pos = 0;
 	lastDocComment: string | null = null;
 
+	private skipComments(): void {
+		while (this.pos < this.tokens.length && this.tokens[this.pos]?.type === TokenType.Comment) {
+			this.pos++;
+		}
+	}
+
 	current(): Token {
+		this.skipComments();
 		const token = this.tokens[this.pos];
 		if (token) return token;
 		const lastToken = this.tokens[this.tokens.length - 1];
@@ -56,7 +63,16 @@ export class ParserContext {
 	}
 
 	peek(offset: number): Token {
-		const token = this.tokens[this.pos + offset];
+		let idx = this.pos;
+		let count = 0;
+		while (count < offset && idx < this.tokens.length) {
+			idx++;
+			while (idx < this.tokens.length && this.tokens[idx]?.type === TokenType.Comment) {
+				idx++;
+			}
+			count++;
+		}
+		const token = this.tokens[idx];
 		if (token) return token;
 		const lastToken = this.tokens[this.tokens.length - 1];
 		if (!lastToken) throw new Error('ParserContext: No tokens available');
@@ -70,6 +86,7 @@ export class ParserContext {
 	advance(): Token {
 		if (!this.isAtEnd()) {
 			this.pos++;
+			this.skipComments();
 		}
 		return this.previous();
 	}

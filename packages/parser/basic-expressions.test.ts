@@ -95,5 +95,16 @@ describe('Parser - Basic Expressions', () => {
 				expect(stmt.expression.items[1]?.key).not.toBeNull();
 			}
 		});
+
+		test('parses array with trailing comma and inline comment', () => {
+			const ast = parser.parse(`<?php [
+				'a' => 1, // comment
+				'b' => 2
+			];`);
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ExpressionStatement' && stmt.expression.kind === 'ArrayExpression') {
+				expect(stmt.expression.items).toHaveLength(2);
+			}
+		});
 	});
 });
