@@ -1,4 +1,5 @@
 *.log
+*.vsix
 .DS_Store
 .sisyphus/
 dist/
