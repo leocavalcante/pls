@@ -370,6 +370,7 @@ export type Expression =
 	| StaticPropertyAccessExpression
 	| ArrayAccessExpression
 	| NewExpression
+	| AnonymousClassExpression
 	| TernaryExpression
 	| NullCoalesceExpression
 	| InstanceofExpression
@@ -549,6 +550,14 @@ export interface NewExpression extends BaseNode {
 	kind: 'NewExpression';
 	class: Expression;
 	arguments: Argument[];
+}
+
+export interface AnonymousClassExpression extends BaseNode {
+	kind: 'AnonymousClassExpression';
+	arguments: Argument[];
+	extends: Identifier | null;
+	implements: Identifier[];
+	body: ClassBody;
 }
 
 export interface TernaryExpression extends BaseNode {

@@ -1,8 +1,11 @@
 import type {
+	AnonymousClassExpression,
 	Argument,
 	ArrayAccessExpression,
 	CallExpression,
+	ClassBody,
 	Expression,
+	Identifier,
 	MethodCallExpression,
 	NewExpression,
 	PropertyAccessExpression,
@@ -14,6 +17,7 @@ export function parseCallExpression(
 	ctx: ParserContext,
 	parseMember: () => Expression,
 	parseArgs: () => Argument[],
+	parseExpr: () => Expression,
 ): Expression {
 	let expr = parseMember();
 
@@ -27,6 +31,8 @@ export function parseCallExpression(
 				arguments: args,
 				loc: { start: expr.loc.start, end },
 			} satisfies CallExpression;
+		} else if (ctx.match(TokenType.OpenBracket)) {
+			expr = handleBracketAccess(ctx, expr, parseExpr);
 		} else {
 			break;
 		}
@@ -143,9 +149,16 @@ export function parseNewExpression(
 	parseMember: () => Expression,
 	parsePrimary: () => Expression,
 	parseArgs: () => Argument[],
+	parseQualifiedIdentifier: () => Identifier,
+	parseClassBody: () => ClassBody,
 ): Expression {
 	if (ctx.match(TokenType.New)) {
 		const start = ctx.previous().start;
+
+		if (ctx.match(TokenType.Class)) {
+			return parseAnonymousClass(ctx, start, parseArgs, parseQualifiedIdentifier, parseClassBody);
+		}
+
 		const classExpr = parseMember();
 		let args: Argument[] = [];
 		let end = classExpr.loc.end;
@@ -164,4 +177,39 @@ export function parseNewExpression(
 	}
 
 	return parsePrimary();
+}
+
+function parseAnonymousClass(
+	ctx: ParserContext,
+	start: { line: number; column: number; offset: number },
+	parseArgs: () => Argument[],
+	parseQualifiedIdentifier: () => Identifier,
+	parseClassBody: () => ClassBody,
+): AnonymousClassExpression {
+	let args: Argument[] = [];
+
+	if (ctx.match(TokenType.OpenParen)) {
+		args = parseArgs();
+		ctx.expect(TokenType.CloseParen, 'Expected ")"');
+	}
+
+	const extendsClause = ctx.match(TokenType.Extends) ? parseQualifiedIdentifier() : null;
+
+	const implementsList: Identifier[] = [];
+	if (ctx.match(TokenType.Implements)) {
+		do {
+			implementsList.push(parseQualifiedIdentifier());
+		} while (ctx.match(TokenType.Comma));
+	}
+
+	const body = parseClassBody();
+
+	return {
+		kind: 'AnonymousClassExpression',
+		arguments: args,
+		extends: extendsClause,
+		implements: implementsList,
+		body,
+		loc: { start, end: body.loc.end },
+	} satisfies AnonymousClassExpression;
 }

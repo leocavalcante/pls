@@ -42,6 +42,10 @@ import { TokenType } from './tokens';
 
 export class ExpressionParser {
 	private getStmt?: () => { parseBlockStatement(): import('./ast/nodes').BlockStatement };
+	private getDecl?: () => {
+		parseClassBody(): import('./ast/nodes').ClassBody;
+		parseQualifiedIdentifier(): import('./ast/nodes').Identifier;
+	};
 
 	constructor(private ctx: ParserContext) {}
 
@@ -49,6 +53,15 @@ export class ExpressionParser {
 		getStmt: () => { parseBlockStatement(): import('./ast/nodes').BlockStatement },
 	): void {
 		this.getStmt = getStmt;
+	}
+
+	setDeclarationParser(
+		getDecl: () => {
+			parseClassBody(): import('./ast/nodes').ClassBody;
+			parseQualifiedIdentifier(): import('./ast/nodes').Identifier;
+		},
+	): void {
+		this.getDecl = getDecl;
 	}
 
 	parseExpression(): Expression {
@@ -80,6 +93,10 @@ export class ExpressionParser {
 
 		if (!this.ctx.check(TokenType.CloseParen)) {
 			do {
+				if (this.ctx.check(TokenType.CloseParen)) {
+					break;
+				}
+
 				const start = this.ctx.current().start;
 				let name = null;
 				let byRef = false;
@@ -269,6 +286,7 @@ export class ExpressionParser {
 			this.ctx,
 			() => this.parseMemberExpression(),
 			() => this.parseArguments(),
+			() => this.parseExpression(),
 		);
 	}
 
@@ -304,6 +322,13 @@ export class ExpressionParser {
 			() => this.parseMemberExpression(),
 			() => this.parsePrimaryExpression(),
 			() => this.parseArguments(),
+			() => this.getDecl?.().parseQualifiedIdentifier() ?? this.parseIdentifier(),
+			() => {
+				if (!this.getDecl) {
+					throw this.ctx.error('Cannot parse anonymous class without declaration parser');
+				}
+				return this.getDecl().parseClassBody();
+			},
 		);
 	}
 }

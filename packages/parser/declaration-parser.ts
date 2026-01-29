@@ -203,7 +203,7 @@ export class DeclarationParser {
 		};
 	}
 
-	private parseClassBody(): ClassBody {
+	parseClassBody(): ClassBody {
 		return parseClassBody(this.ctx, () => this.parseClassMember());
 	}
 

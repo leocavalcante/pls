@@ -19,6 +19,7 @@ export class Parser {
 		this.stmt = new StatementParser(this.ctx, this.expr, () => this.decl);
 		this.decl = new DeclarationParser(this.ctx, this.expr, () => this.stmt);
 		this.expr.setStatementParser(() => this.stmt);
+		this.expr.setDeclarationParser(() => this.decl);
 	}
 
 	parse(source: string): Program {

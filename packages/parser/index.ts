@@ -61,6 +61,7 @@ export type {
 	CallExpression,
 	MemberExpression,
 	NewExpression,
+	AnonymousClassExpression,
 	InstanceofExpression,
 	CloneExpression,
 	YieldExpression,
