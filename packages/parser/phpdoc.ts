@@ -28,6 +28,108 @@ export interface PhpDocInfo {
 	throws: PhpDocThrows[];
 }
 
+type CurrentSection = 'summary' | 'description' | 'tags';
+type CurrentTag = { type: string; content: string[] } | null;
+
+interface ParsingState {
+	currentSection: CurrentSection;
+	summaryLine?: string;
+	descriptionLines: string[];
+	currentTag: CurrentTag;
+}
+
+function processParamTag(content: string, result: PhpDocInfo): void {
+	const param = parseParamTag(content);
+	if (param) {
+		result.params.push(param);
+	}
+}
+
+function processReturnTag(content: string, result: PhpDocInfo): void {
+	const returnInfo = parseReturnTag(content);
+	if (returnInfo) {
+		result.return = returnInfo;
+	}
+}
+
+function processVarTag(content: string, result: PhpDocInfo): void {
+	const varInfo = parseVarTag(content);
+	if (varInfo) {
+		result.var = varInfo;
+	}
+}
+
+function processThrowsTag(content: string, result: PhpDocInfo): void {
+	const throwsInfo = parseThrowsTag(content);
+	if (throwsInfo) {
+		result.throws.push(throwsInfo);
+	}
+}
+
+function flushCurrentTag(currentTag: CurrentTag, result: PhpDocInfo): void {
+	if (!currentTag) return;
+
+	const content = currentTag.content.join('\n').trim();
+	const tagType = currentTag.type;
+
+	if (tagType === 'param') {
+		processParamTag(content, result);
+	} else if (tagType === 'return') {
+		processReturnTag(content, result);
+	} else if (tagType === 'var') {
+		processVarTag(content, result);
+	} else if (tagType === 'throws') {
+		processThrowsTag(content, result);
+	}
+}
+
+function isKnownTag(tagName: string): boolean {
+	return tagName === 'param' || tagName === 'return' || tagName === 'var' || tagName === 'throws';
+}
+
+function processTagLine(
+	tagName: string,
+	tagContent: string,
+	state: ParsingState,
+	result: PhpDocInfo,
+): void {
+	flushCurrentTag(state.currentTag, result);
+	state.currentTag = null;
+
+	if (isKnownTag(tagName)) {
+		state.currentSection = 'tags';
+		state.currentTag = {
+			type: tagName,
+			content: [tagContent],
+		};
+	}
+}
+
+function processContentLine(line: string, state: ParsingState): void {
+	if (!line.trim()) return;
+
+	if (state.currentTag) {
+		state.currentTag.content.push(line);
+	} else if (state.currentSection === 'summary') {
+		state.summaryLine = line.trim();
+		state.currentSection = 'description';
+	} else if (state.currentSection === 'description') {
+		state.descriptionLines.push(line.trim());
+	}
+}
+
+function processLine(line: string, state: ParsingState, result: PhpDocInfo): void {
+	const tagMatch = line.match(/^@(\w+)(?:\s+(.*))?$/);
+
+	if (tagMatch) {
+		const tagName = tagMatch[1];
+		const tagContent = tagMatch[2] || '';
+		processTagLine(tagName, tagContent, state, result);
+	} else {
+		processContentLine(line, state);
+	}
+}
+
 export function parsePhpDoc(comment: string): PhpDocInfo {
 	const result: PhpDocInfo = {
 		params: [],
@@ -38,85 +140,23 @@ export function parsePhpDoc(comment: string): PhpDocInfo {
 	const normalized = lines.join('\n').replace(/@(param|return|var|throws)/g, '\n@$1');
 	const cleanedLines = normalized.split('\n');
 
-	let currentSection: 'summary' | 'description' | 'tags' = 'summary';
-	let summaryLine: string | undefined;
-	const descriptionLines: string[] = [];
-	let currentTag: { type: string; content: string[] } | null = null;
-
-	const flushCurrentTag = () => {
-		if (!currentTag) return;
-
-		const content = currentTag.content.join('\n').trim();
-		const tagType = currentTag.type;
-
-		if (tagType === 'param') {
-			const param = parseParamTag(content);
-			if (param) {
-				result.params.push(param);
-			}
-		} else if (tagType === 'return') {
-			const returnInfo = parseReturnTag(content);
-			if (returnInfo) {
-				result.return = returnInfo;
-			}
-		} else if (tagType === 'var') {
-			const varInfo = parseVarTag(content);
-			if (varInfo) {
-				result.var = varInfo;
-			}
-		} else if (tagType === 'throws') {
-			const throwsInfo = parseThrowsTag(content);
-			if (throwsInfo) {
-				result.throws.push(throwsInfo);
-			}
-		}
-
-		currentTag = null;
+	const state: ParsingState = {
+		currentSection: 'summary',
+		descriptionLines: [],
+		currentTag: null,
 	};
 
 	for (const line of cleanedLines) {
-		const tagMatch = line.match(/^@(\w+)(?:\s+(.*))?$/);
-
-		if (tagMatch) {
-			flushCurrentTag();
-
-			const tagName = tagMatch[1];
-			const tagContent = tagMatch[2] || '';
-
-			if (
-				tagName === 'param' ||
-				tagName === 'return' ||
-				tagName === 'var' ||
-				tagName === 'throws'
-			) {
-				currentSection = 'tags';
-				currentTag = {
-					type: tagName,
-					content: [tagContent],
-				};
-			}
-		} else if (currentTag) {
-			if (line.trim()) {
-				currentTag.content.push(line);
-			}
-		} else if (currentSection === 'summary') {
-			if (line.trim()) {
-				summaryLine = line.trim();
-				currentSection = 'description';
-			}
-		} else if (currentSection === 'description') {
-			if (line.trim()) {
-				descriptionLines.push(line.trim());
-			}
-		}
+		processLine(line, state, result);
 	}
 
-	flushCurrentTag();
-	if (summaryLine) {
-		result.summary = summaryLine;
+	flushCurrentTag(state.currentTag, result);
+
+	if (state.summaryLine) {
+		result.summary = state.summaryLine;
 	}
-	if (descriptionLines.length > 0) {
-		result.description = descriptionLines.join('\n');
+	if (state.descriptionLines.length > 0) {
+		result.description = state.descriptionLines.join('\n');
 	}
 
 	return result;
