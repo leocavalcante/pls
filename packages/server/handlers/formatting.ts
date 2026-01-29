@@ -74,6 +74,7 @@ interface FormattingState {
 	indentLevel: number;
 	inMultilineComment: boolean;
 	heredocState: HeredocState;
+	inCaseBlock: boolean;
 }
 
 function processHeredocLine(line: string, trimmed: string, state: HeredocState): string | null {
@@ -102,15 +103,19 @@ function processMultilineComment(
 	state: { inMultilineComment: boolean },
 ): string | null {
 	if (state.inMultilineComment) {
-		const result = indent.repeat(indentLevel) + trimmed;
+		const prefix = trimmed.startsWith('*') ? ' ' : '';
+		const result = indent.repeat(indentLevel) + prefix + trimmed;
 		if (trimmed.endsWith('*/')) {
 			state.inMultilineComment = false;
 		}
 		return result;
 	}
 
-	if (trimmed.startsWith('/*') && !trimmed.endsWith('*/')) {
-		state.inMultilineComment = true;
+	if (trimmed.startsWith('/*')) {
+		if (!trimmed.endsWith('*/')) {
+			state.inMultilineComment = true;
+		}
+		return indent.repeat(indentLevel) + trimmed;
 	}
 
 	return null;
@@ -132,6 +137,7 @@ function formatPhp(text: string, options: FormattingOptions): string {
 		indentLevel: 0,
 		inMultilineComment: false,
 		heredocState: { inHeredoc: false, heredocEnd: '' },
+		inCaseBlock: false,
 	};
 
 	for (let i = 0; i < lines.length; i++) {
@@ -155,6 +161,14 @@ function formatPhp(text: string, options: FormattingOptions): string {
 			continue;
 		}
 
+		const isCaseOrDefault = /^(case\s+.+:|default:)/.test(trimmed);
+		const closesSwitch = trimmed.startsWith('}');
+
+		if (state.inCaseBlock && (isCaseOrDefault || closesSwitch)) {
+			state.indentLevel = Math.max(0, state.indentLevel - 1);
+			state.inCaseBlock = false;
+		}
+
 		const lineIndentDelta = getIndentDelta(trimmed);
 		const currentIndent = calculateCurrentIndent(state.indentLevel, lineIndentDelta);
 
@@ -165,6 +179,10 @@ function formatPhp(text: string, options: FormattingOptions): string {
 		result.push(indent.repeat(Math.max(0, currentIndent + continuationIndent)) + line);
 
 		state.indentLevel = Math.max(0, state.indentLevel + lineIndentDelta.before + lineIndentDelta.after);
+
+		if (isCaseOrDefault) {
+			state.inCaseBlock = true;
+		}
 	}
 
 	let formatted = result.join('\n');
@@ -191,12 +209,8 @@ function getIndentDelta(line: string): { before: number; after: number } {
 		}
 	}
 
-	if (/^(case\s+.+:|default:)/.test(line) && !line.includes('{')) {
+	if (/^(case\s+.+:|default:)/.test(line)) {
 		after++;
-	}
-
-	if (/^\}/.test(line) && /^(case\s+.+:|default:)/.test(line.slice(1).trim())) {
-		before++;
 	}
 
 	return { before, after };
@@ -330,6 +344,10 @@ function restoreStrings(template: string, strings: string[]): string {
 }
 
 function formatLineSpacing(input: string): string {
+	if (input.startsWith('*') || input.startsWith('//') || input.startsWith('/*')) {
+		return input;
+	}
+
 	let phpTag = '';
 	let rest = input;
 
@@ -370,6 +388,8 @@ function formatLineSpacing(input: string): string {
 	result = result.replace(/\s+\)/g, ')');
 	result = result.replace(/\[\s+/g, '[');
 	result = result.replace(/\s+\]/g, ']');
+	result = result.replace(/<\s+/g, '<');
+	result = result.replace(/\s+>/g, '>');
 
 	result = result.replace(/\s*{\s*/g, ' {');
 	result = result.replace(/{\s*$/g, '{');
