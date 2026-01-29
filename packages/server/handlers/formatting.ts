@@ -65,44 +65,88 @@ export function createRangeFormattingHandler(
 	};
 }
 
+interface HeredocState {
+	inHeredoc: boolean;
+	heredocEnd: string;
+}
+
+interface FormattingState {
+	indentLevel: number;
+	inMultilineComment: boolean;
+	heredocState: HeredocState;
+}
+
+function processHeredocLine(line: string, trimmed: string, state: HeredocState): string | null {
+	if (state.inHeredoc) {
+		if (trimmed === state.heredocEnd || trimmed === `${state.heredocEnd};`) {
+			state.inHeredoc = false;
+			state.heredocEnd = '';
+		}
+		return line;
+	}
+
+	const heredocMatch = trimmed.match(/<<<\s*['"]?(\w+)['"]?/);
+	if (heredocMatch && !trimmed.includes(heredocMatch[1], heredocMatch[0].length)) {
+		state.inHeredoc = true;
+		state.heredocEnd = heredocMatch[1];
+	}
+
+	return null;
+}
+
+function processMultilineComment(
+	trimmed: string,
+	indent: string,
+	indentLevel: number,
+	state: { inMultilineComment: boolean },
+): string | null {
+	if (state.inMultilineComment) {
+		const result = indent.repeat(indentLevel) + trimmed;
+		if (trimmed.endsWith('*/')) {
+			state.inMultilineComment = false;
+		}
+		return result;
+	}
+
+	if (trimmed.startsWith('/*') && !trimmed.endsWith('*/')) {
+		state.inMultilineComment = true;
+	}
+
+	return null;
+}
+
+function calculateCurrentIndent(
+	indentLevel: number,
+	lineIndentDelta: { before: number; after: number },
+): number {
+	return lineIndentDelta.before < 0 ? indentLevel + lineIndentDelta.before : indentLevel;
+}
+
 function formatPhp(text: string, options: FormattingOptions): string {
 	const indent = options.insertSpaces ? ' '.repeat(options.tabSize) : '\t';
 	const lines = text.split('\n');
 	const result: string[] = [];
-	let indentLevel = 0;
-	let inMultilineComment = false;
-	let inHeredoc = false;
-	let heredocEnd = '';
+
+	const state: FormattingState = {
+		indentLevel: 0,
+		inMultilineComment: false,
+		heredocState: { inHeredoc: false, heredocEnd: '' },
+	};
 
 	for (let i = 0; i < lines.length; i++) {
 		let line = lines[i];
 		const trimmed = line.trim();
 
-		if (inHeredoc) {
-			result.push(line);
-			if (trimmed === heredocEnd || trimmed === `${heredocEnd};`) {
-				inHeredoc = false;
-				heredocEnd = '';
-			}
+		const heredocLine = processHeredocLine(line, trimmed, state.heredocState);
+		if (heredocLine !== null) {
+			result.push(heredocLine);
 			continue;
 		}
 
-		const heredocMatch = trimmed.match(/<<<\s*['"]?(\w+)['"]?/);
-		if (heredocMatch && !trimmed.includes(heredocMatch[1], heredocMatch[0].length)) {
-			inHeredoc = true;
-			heredocEnd = heredocMatch[1];
-		}
-
-		if (inMultilineComment) {
-			result.push(indent.repeat(indentLevel) + trimmed);
-			if (trimmed.endsWith('*/')) {
-				inMultilineComment = false;
-			}
+		const commentLine = processMultilineComment(trimmed, indent, state.indentLevel, state);
+		if (commentLine !== null) {
+			result.push(commentLine);
 			continue;
-		}
-
-		if (trimmed.startsWith('/*') && !trimmed.endsWith('*/')) {
-			inMultilineComment = true;
 		}
 
 		if (trimmed === '') {
@@ -111,13 +155,12 @@ function formatPhp(text: string, options: FormattingOptions): string {
 		}
 
 		const lineIndentDelta = getIndentDelta(trimmed);
-		const currentIndent =
-			lineIndentDelta.before < 0 ? indentLevel + lineIndentDelta.before : indentLevel;
+		const currentIndent = calculateCurrentIndent(state.indentLevel, lineIndentDelta);
 
 		line = formatLineSpacing(trimmed);
 		result.push(indent.repeat(Math.max(0, currentIndent)) + line);
 
-		indentLevel = Math.max(0, indentLevel + lineIndentDelta.after);
+		state.indentLevel = Math.max(0, state.indentLevel + lineIndentDelta.after);
 	}
 
 	let formatted = result.join('\n');
@@ -155,48 +198,85 @@ function getIndentDelta(line: string): { before: number; after: number } {
 	return { before, after };
 }
 
+interface StringParsingState {
+	inString: string | null;
+	isEscaped: boolean;
+}
+
+function processEscapeChar(char: string, state: StringParsingState): boolean {
+	if (state.isEscaped) {
+		state.isEscaped = false;
+		return true;
+	}
+
+	if (char === '\\') {
+		state.isEscaped = true;
+		return true;
+	}
+
+	return false;
+}
+
+function processStringChar(char: string, state: StringParsingState): boolean {
+	if (state.inString) {
+		if (char === state.inString) {
+			state.inString = null;
+		}
+		return true;
+	}
+
+	if (char === '"' || char === "'") {
+		state.inString = char;
+		return true;
+	}
+
+	return false;
+}
+
+function processComment(
+	line: string,
+	i: number,
+	char: string,
+	nextChar: string | undefined,
+): { shouldBreak: boolean; newIndex: number } {
+	if (char === '/' && nextChar === '/') {
+		return { shouldBreak: true, newIndex: i };
+	}
+
+	if (char === '/' && nextChar === '*') {
+		const closeIndex = line.indexOf('*/', i + 2);
+		if (closeIndex !== -1) {
+			return { shouldBreak: false, newIndex: closeIndex + 1 };
+		}
+		return { shouldBreak: true, newIndex: i };
+	}
+
+	return { shouldBreak: false, newIndex: i };
+}
+
 function stripStringsAndComments(line: string): string {
 	let result = '';
-	let inString: string | null = null;
-	let isEscaped = false;
+	const state: StringParsingState = { inString: null, isEscaped: false };
 
 	for (let i = 0; i < line.length; i++) {
 		const char = line[i];
 		const nextChar = line[i + 1];
 
-		if (isEscaped) {
-			isEscaped = false;
+		if (processEscapeChar(char, state)) {
 			continue;
 		}
 
-		if (char === '\\') {
-			isEscaped = true;
+		if (processStringChar(char, state)) {
 			continue;
 		}
 
-		if (inString) {
-			if (char === inString) {
-				inString = null;
-			}
-			continue;
-		}
-
-		if (char === '"' || char === "'") {
-			inString = char;
-			continue;
-		}
-
-		if (char === '/' && nextChar === '/') {
+		const comment = processComment(line, i, char, nextChar);
+		if (comment.shouldBreak) {
 			break;
 		}
-
-		if (char === '/' && nextChar === '*') {
-			const closeIndex = line.indexOf('*/', i + 2);
-			if (closeIndex !== -1) {
-				i = closeIndex + 1;
-				continue;
-			}
-			break;
+		if (comment.newIndex > i) {
+			i = comment.newIndex;
+			continue;
 		}
 
 		result += char;
