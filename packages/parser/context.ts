@@ -122,7 +122,12 @@ export class ParserContext {
 			TokenType.New,
 			TokenType.Clone,
 			TokenType.Instanceof,
+			TokenType.Enum,
 		];
 		return keywordsAsIdentifiers.includes(this.current().type);
+	}
+
+	isKeywordAsPropertyName(): boolean {
+		return this.isKeywordAsIdentifier() || this.current().type === TokenType.Match;
 	}
 }

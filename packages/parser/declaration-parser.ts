@@ -21,6 +21,7 @@ import {
 	createLocation,
 } from './ast/nodes';
 import type { ParserContext } from './context';
+import type { Token } from './tokens';
 import {
 	parseAttribute,
 	parseAttributeGroups,
@@ -171,11 +172,11 @@ export class DeclarationParser {
 			name = '\\';
 		}
 
-		const first = this.ctx.expect(TokenType.Identifier, 'Expected identifier');
+		const first = this.expectIdentifierOrKeyword();
 		name += first.value;
 
 		while (this.ctx.match(TokenType.Backslash)) {
-			const next = this.ctx.expect(TokenType.Identifier, 'Expected identifier after \\');
+			const next = this.expectIdentifierOrKeyword();
 			name += `\\${next.value}`;
 		}
 
@@ -184,6 +185,13 @@ export class DeclarationParser {
 			name,
 			loc: createLocation(start, this.ctx.previous().end),
 		};
+	}
+
+	private expectIdentifierOrKeyword(): Token {
+		if (this.ctx.check(TokenType.Identifier) || this.ctx.isKeywordAsIdentifier()) {
+			return this.ctx.advance();
+		}
+		throw this.ctx.error('Expected identifier');
 	}
 
 	private parseIdentifier(): Identifier {

@@ -270,7 +270,7 @@ export class ExpressionParser {
 		if (this.ctx.check(TokenType.Variable)) {
 			return this.parseVariable();
 		}
-		if (this.ctx.check(TokenType.Identifier) || this.ctx.isKeywordAsIdentifier()) {
+		if (this.ctx.check(TokenType.Identifier) || this.ctx.isKeywordAsPropertyName()) {
 			return this.parseIdentifier();
 		}
 		if (this.ctx.check(TokenType.OpenBrace)) {
