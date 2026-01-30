@@ -25,28 +25,42 @@ bun run build:all        # Build for all platforms (linux, darwin, windows)
 ## Architecture
 
 ```
-src/
-├── index.ts                    # Entry point
-├── parser/
-│   ├── lexer.ts               # Tokenizer (multi-mode: HTML/PHP)
-│   ├── tokens.ts              # Token type definitions
-│   ├── parser.ts              # Main parser (recursive descent)
-│   ├── context.ts             # Parser state and utilities
-│   ├── error.ts               # ParseError class
-│   ├── ast/nodes.ts           # AST node definitions
-│   ├── lexer/                 # Lexer modules (literals, operators, comments)
-│   ├── expressions/           # Expression parsing
-│   ├── statements/            # Statement parsing
-│   └── declarations/          # Declaration parsing (class, function, etc.)
-└── server/
-    ├── server.ts              # LSP connection and initialization
-    ├── document-manager.ts    # Document state management
-    ├── definition-index.ts    # Symbol indexing
-    └── handlers/              # LSP request handlers
-
-test/
-├── parser/                    # Lexer and parser tests
-└── server/                    # LSP handler tests
+packages/
+├── parser/                    # Custom PHP parser package (@pls/parser)
+│   ├── index.ts              # Package entry point
+│   ├── lexer.ts              # Tokenizer (multi-mode: HTML/PHP)
+│   ├── tokens.ts             # Token type definitions
+│   ├── parser.ts             # Main parser (recursive descent)
+│   ├── context.ts            # Parser state and utilities
+│   ├── error.ts              # ParseError class
+│   ├── phpdoc.ts             # PHPDoc comment parsing
+│   ├── ast/nodes.ts          # AST node definitions
+│   ├── lexer/                # Lexer modules (literals, operators, comments)
+│   ├── expressions/          # Expression parsing (primary, binary, member, etc.)
+│   ├── statements/           # Statement parsing (loops, control-flow, etc.)
+│   ├── declarations/         # Declaration parsing (class, function, attributes, types)
+│   ├── incremental/          # Incremental parsing support
+│   └── *.test.ts             # Parser tests (co-located)
+│
+├── server/                    # LSP server package (@pls/server)
+│   ├── index.ts              # Package entry point
+│   ├── server.ts             # LSP connection and initialization
+│   ├── document-manager.ts   # Document state management
+│   ├── definition-index.ts   # Symbol indexing
+│   ├── reference-index.ts    # Reference tracking
+│   ├── type-inference.ts     # Type inference engine
+│   ├── symbol-extractor.ts   # Symbol extraction from AST
+│   ├── workspace-scanner.ts  # Workspace file scanning
+│   ├── parallel-parser.ts    # Multi-threaded parsing
+│   ├── background-indexer.ts # Background indexing
+│   ├── index-cache.ts        # Index persistence
+│   ├── configuration.ts      # Server configuration
+│   ├── handlers/             # LSP request handlers
+│   ├── __perf__/             # Performance benchmarks
+│   └── *.test.ts             # Server tests (co-located)
+│
+├── vscode/                    # VS Code extension package
+└── neovim/                    # Neovim plugin package
 ```
 
 ## Code Style
@@ -170,7 +184,7 @@ describe('Parser - Statements', () => {
 ### Coverage Requirements
 
 - **Target**: Minimum 90% line coverage for the entire codebase
-- **Current Coverage**: 95.26% (358 tests across 21 test files)
+- **Current Coverage**: 92.76% line coverage (939 tests across 63 test files)
 - Run `bun run test:coverage` to verify coverage meets the 90% threshold
 - All new features must include tests that maintain or improve coverage
 

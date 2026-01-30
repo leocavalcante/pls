@@ -187,7 +187,7 @@ bun test --watch
 bun run test:coverage
 ```
 
-**Current status**: 819 tests passing with ~90%+ line coverage.
+**Current status**: 939 tests passing with ~93% line coverage.
 
 ## 🛠️ Development
 
