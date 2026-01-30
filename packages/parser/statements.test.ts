@@ -322,6 +322,79 @@ describe('Parser - Statements', () => {
 				expect(stmt.catches[0]?.variable).toBeNull();
 			}
 		});
+
+		test('parses catch with fully-qualified class name', () => {
+			const ast = parser.parse(`<?php
+				try {
+					$x = 1;
+				} catch (\\Exception $e) {
+					echo $e;
+				}
+			`);
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'TryStatement') {
+				expect(stmt.catches[0]?.types[0]?.name).toBe('\\Exception');
+			}
+		});
+
+		test('parses catch with namespaced class name', () => {
+			const ast = parser.parse(`<?php
+				try {
+					$x = 1;
+				} catch (App\\Exceptions\\CustomException $e) {
+					echo $e;
+				}
+			`);
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'TryStatement') {
+				expect(stmt.catches[0]?.types[0]?.name).toBe('App\\Exceptions\\CustomException');
+			}
+		});
+
+		test('parses catch with FQN namespaced class name', () => {
+			const ast = parser.parse(`<?php
+				try {
+					$x = 1;
+				} catch (\\App\\Exceptions\\CustomException $e) {
+					echo $e;
+				}
+			`);
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'TryStatement') {
+				expect(stmt.catches[0]?.types[0]?.name).toBe('\\App\\Exceptions\\CustomException');
+			}
+		});
+
+		test('parses union catch with FQN types', () => {
+			const ast = parser.parse(`<?php
+				try {
+					$x = 1;
+				} catch (\\Exception|\\Error $e) {
+					echo $e;
+				}
+			`);
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'TryStatement') {
+				expect(stmt.catches[0]?.types).toHaveLength(2);
+				expect(stmt.catches[0]?.types[0]?.name).toBe('\\Exception');
+				expect(stmt.catches[0]?.types[1]?.name).toBe('\\Error');
+			}
+		});
+
+		test('parses catch with FQN without variable (PHP 8+)', () => {
+			const ast = parser.parse(`<?php
+				try {
+					$x = 1;
+				} catch (\\Exception) {
+					echo "error";
+				}
+			`);
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'TryStatement') {
+				expect(stmt.catches[0]?.types[0]?.name).toBe('\\Exception');
+				expect(stmt.catches[0]?.variable).toBeNull();
+			}
+		});
 	});
 
 	describe('throw statement', () => {

@@ -15,6 +15,7 @@ export interface ExceptionCallbacks {
 	parseExpression(): Expression;
 	parseBlockStatement(): BlockStatement;
 	parseVariable(): Variable;
+	parseQualifiedIdentifier(): Identifier;
 }
 
 export function parseTryStatement(ctx: ParserContext, callbacks: ExceptionCallbacks): TryStatement {
@@ -49,9 +50,9 @@ function parseCatchClause(ctx: ParserContext, callbacks: ExceptionCallbacks): Ca
 	ctx.expect(TokenType.OpenParen, 'Expected "(" after catch');
 
 	const types: Identifier[] = [];
-	types.push(parseIdentifier(ctx));
+	types.push(callbacks.parseQualifiedIdentifier());
 	while (ctx.match(TokenType.Pipe)) {
-		types.push(parseIdentifier(ctx));
+		types.push(callbacks.parseQualifiedIdentifier());
 	}
 
 	let variable: Variable | null = null;
@@ -68,15 +69,6 @@ function parseCatchClause(ctx: ParserContext, callbacks: ExceptionCallbacks): Ca
 		variable,
 		body,
 		loc: createLocation(start, ctx.previous().end),
-	};
-}
-
-function parseIdentifier(ctx: ParserContext): Identifier {
-	const token = ctx.expect(TokenType.Identifier, 'Expected identifier');
-	return {
-		kind: 'Identifier',
-		name: token.value,
-		loc: createLocation(token.start, token.end),
 	};
 }
 

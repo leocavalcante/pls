@@ -195,12 +195,15 @@ export class DeclarationParser {
 	}
 
 	private parseIdentifier(): Identifier {
-		const token = this.ctx.expect(TokenType.Identifier, 'Expected identifier');
-		return {
-			kind: 'Identifier',
-			name: token.value,
-			loc: createLocation(token.start, token.end),
-		};
+		if (this.ctx.check(TokenType.Identifier) || this.ctx.isKeywordAsMethodName()) {
+			const token = this.ctx.advance();
+			return {
+				kind: 'Identifier',
+				name: token.value,
+				loc: createLocation(token.start, token.end),
+			};
+		}
+		throw this.ctx.error('Expected identifier');
 	}
 
 	parseClassBody(): ClassBody {
@@ -209,6 +212,10 @@ export class DeclarationParser {
 
 	private parseClassMember(): ClassMember | null {
 		this.ctx.skipCommentsAndCaptureDocComment();
+
+		if (this.ctx.check(TokenType.CloseBrace)) {
+			return null;
+		}
 
 		if (this.ctx.check(TokenType.Use)) {
 			return parseTraitUse(
@@ -257,6 +264,10 @@ export class DeclarationParser {
 
 	private parseInterfaceMember(): InterfaceMember | null {
 		this.ctx.skipCommentsAndCaptureDocComment();
+
+		if (this.ctx.check(TokenType.CloseBrace)) {
+			return null;
+		}
 
 		const attributes = this.parseAttributeGroups();
 		const modifiers = parseModifiers(this.ctx);

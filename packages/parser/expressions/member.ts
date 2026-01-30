@@ -13,26 +13,34 @@ import type {
 import type { ParserContext } from '../context';
 import { TokenType } from '../tokens';
 
+type ParseArgsResult = { args: Argument[]; isFirstClassCallable: boolean };
+
 export function parseCallExpression(
 	ctx: ParserContext,
 	parseMember: () => Expression,
-	parseArgs: () => Argument[],
+	parseArgs: () => ParseArgsResult,
 	parseExpr: () => Expression,
+	parsePropertyName: () => Expression,
 ): Expression {
 	let expr = parseMember();
 
 	while (true) {
 		if (ctx.match(TokenType.OpenParen)) {
-			const args = parseArgs();
+			const { args, isFirstClassCallable } = parseArgs();
 			const end = ctx.expect(TokenType.CloseParen, 'Expected ")" after arguments').end;
 			expr = {
 				kind: 'CallExpression',
 				callee: expr,
 				arguments: args,
+				isFirstClassCallable: isFirstClassCallable || undefined,
 				loc: { start: expr.loc.start, end },
 			} satisfies CallExpression;
 		} else if (ctx.match(TokenType.OpenBracket)) {
 			expr = handleBracketAccess(ctx, expr, parseExpr);
+		} else if (ctx.match(TokenType.Arrow) || ctx.match(TokenType.NullsafeArrow)) {
+			expr = handleArrowAccess(ctx, expr, parsePropertyName, parseArgs);
+		} else if (ctx.match(TokenType.DoubleColon)) {
+			expr = handleStaticAccess(ctx, expr, parsePropertyName, parseArgs);
 		} else {
 			break;
 		}
@@ -45,14 +53,14 @@ function handleArrowAccess(
 	ctx: ParserContext,
 	expr: Expression,
 	parsePropertyName: () => Expression,
-	parseArgs: () => Argument[],
+	parseArgs: () => ParseArgsResult,
 ): Expression {
 	const nullsafe = ctx.previous().type === TokenType.NullsafeArrow;
 	const property = parsePropertyName();
 
 	if (ctx.check(TokenType.OpenParen)) {
 		ctx.advance();
-		const args = parseArgs();
+		const { args, isFirstClassCallable } = parseArgs();
 		const end = ctx.expect(TokenType.CloseParen, 'Expected ")"').end;
 		return {
 			kind: 'MethodCallExpression',
@@ -60,6 +68,7 @@ function handleArrowAccess(
 			property,
 			arguments: args,
 			nullsafe,
+			isFirstClassCallable: isFirstClassCallable || undefined,
 			loc: { start: expr.loc.start, end },
 		} satisfies MethodCallExpression;
 	}
@@ -95,19 +104,20 @@ function handleStaticAccess(
 	ctx: ParserContext,
 	expr: Expression,
 	parsePropertyName: () => Expression,
-	parseArgs: () => Argument[],
+	parseArgs: () => ParseArgsResult,
 ): Expression {
 	const member = parsePropertyName();
 
 	if (ctx.check(TokenType.OpenParen)) {
 		ctx.advance();
-		const args = parseArgs();
+		const { args, isFirstClassCallable } = parseArgs();
 		const end = ctx.expect(TokenType.CloseParen, 'Expected ")"').end;
 		return {
 			kind: 'StaticCallExpression',
 			class: expr,
 			method: member,
 			arguments: args,
+			isFirstClassCallable: isFirstClassCallable || undefined,
 			loc: { start: expr.loc.start, end },
 		};
 	}
@@ -124,7 +134,7 @@ export function parseMemberExpression(
 	ctx: ParserContext,
 	parseNew: () => Expression,
 	parsePropertyName: () => Expression,
-	parseArgs: () => Argument[],
+	parseArgs: () => ParseArgsResult,
 	parseExpr: () => Expression,
 ): Expression {
 	let expr = parseNew();
@@ -148,7 +158,7 @@ export function parseNewExpression(
 	ctx: ParserContext,
 	parseMember: () => Expression,
 	parsePrimary: () => Expression,
-	parseArgs: () => Argument[],
+	parseArgs: () => ParseArgsResult,
 	parseQualifiedIdentifier: () => Identifier,
 	parseClassBody: () => ClassBody,
 ): Expression {
@@ -164,7 +174,8 @@ export function parseNewExpression(
 		let end = classExpr.loc.end;
 
 		if (ctx.match(TokenType.OpenParen)) {
-			args = parseArgs();
+			const result = parseArgs();
+			args = result.args;
 			end = ctx.expect(TokenType.CloseParen, 'Expected ")"').end;
 		}
 
@@ -182,14 +193,15 @@ export function parseNewExpression(
 function parseAnonymousClass(
 	ctx: ParserContext,
 	start: { line: number; column: number; offset: number },
-	parseArgs: () => Argument[],
+	parseArgs: () => ParseArgsResult,
 	parseQualifiedIdentifier: () => Identifier,
 	parseClassBody: () => ClassBody,
 ): AnonymousClassExpression {
 	let args: Argument[] = [];
 
 	if (ctx.match(TokenType.OpenParen)) {
-		args = parseArgs();
+		const result = parseArgs();
+		args = result.args;
 		ctx.expect(TokenType.CloseParen, 'Expected ")"');
 	}
 

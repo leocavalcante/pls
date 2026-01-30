@@ -17,6 +17,7 @@ export interface Program extends BaseNode {
 }
 
 export type Statement =
+	| EmptyStatement
 	| ExpressionStatement
 	| EchoStatement
 	| ReturnStatement
@@ -43,6 +44,10 @@ export type Statement =
 	| StaticVariableStatement
 	| DeclareStatement
 	| InlineHtml;
+
+export interface EmptyStatement extends BaseNode {
+	kind: 'EmptyStatement';
+}
 
 export interface ExpressionStatement extends BaseNode {
 	kind: 'ExpressionStatement';
@@ -229,6 +234,7 @@ export interface PropertyDeclaration extends BaseNode {
 export interface ClassConstDeclaration extends BaseNode {
 	kind: 'ClassConstDeclaration';
 	name: Identifier;
+	type: TypeNode | null;
 	value: Expression;
 	visibility: 'public' | 'protected' | 'private';
 	isFinal: boolean;
@@ -502,6 +508,7 @@ export interface CallExpression extends BaseNode {
 	kind: 'CallExpression';
 	callee: Expression;
 	arguments: Argument[];
+	isFirstClassCallable?: boolean;
 }
 
 export interface Argument extends BaseNode {
@@ -518,6 +525,7 @@ export interface MethodCallExpression extends BaseNode {
 	property: Expression;
 	arguments: Argument[];
 	nullsafe: boolean;
+	isFirstClassCallable?: boolean;
 }
 
 export interface StaticCallExpression extends BaseNode {
@@ -525,6 +533,7 @@ export interface StaticCallExpression extends BaseNode {
 	class: Expression;
 	method: Expression;
 	arguments: Argument[];
+	isFirstClassCallable?: boolean;
 }
 
 export interface PropertyAccessExpression extends BaseNode {

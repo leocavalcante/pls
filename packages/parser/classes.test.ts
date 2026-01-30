@@ -283,6 +283,78 @@ describe('Parser - Class, Interface, Trait Declarations', () => {
 				}
 			}
 		});
+
+		test('parses typed class constant with string type', () => {
+			const ast = parser.parse('<?php class Foo { public const string BAR = "baz"; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ClassDeclaration') {
+				const constant = stmt.body.members[0];
+				if (constant?.kind === 'ClassConstDeclaration') {
+					expect(constant.type?.kind).toBe('SimpleType');
+					if (constant.type?.kind === 'SimpleType') {
+						expect(constant.type.name).toBe('string');
+					}
+				}
+			}
+		});
+
+		test('parses typed class constant with int type', () => {
+			const ast = parser.parse('<?php class Foo { public const int VERSION = 1; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ClassDeclaration') {
+				const constant = stmt.body.members[0];
+				if (constant?.kind === 'ClassConstDeclaration') {
+					expect(constant.type?.kind).toBe('SimpleType');
+					if (constant.type?.kind === 'SimpleType') {
+						expect(constant.type.name).toBe('int');
+					}
+				}
+			}
+		});
+
+		test('parses typed class constant with nullable type', () => {
+			const ast = parser.parse('<?php class Foo { public const ?string NAME = null; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ClassDeclaration') {
+				const constant = stmt.body.members[0];
+				if (constant?.kind === 'ClassConstDeclaration') {
+					expect(constant.type?.kind).toBe('NullableType');
+				}
+			}
+		});
+
+		test('parses typed class constant with union type', () => {
+			const ast = parser.parse('<?php class Foo { public const string|int ID = 1; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ClassDeclaration') {
+				const constant = stmt.body.members[0];
+				if (constant?.kind === 'ClassConstDeclaration') {
+					expect(constant.type?.kind).toBe('UnionType');
+				}
+			}
+		});
+
+		test('parses untyped class constant (type is null)', () => {
+			const ast = parser.parse('<?php class Foo { public const BAR = 1; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'ClassDeclaration') {
+				const constant = stmt.body.members[0];
+				if (constant?.kind === 'ClassConstDeclaration') {
+					expect(constant.type).toBeNull();
+				}
+			}
+		});
+
+		test('parses typed interface constant', () => {
+			const ast = parser.parse('<?php interface Foo { public const string VERSION = "1.0"; }');
+			const stmt = ast.statements[0];
+			if (stmt?.kind === 'InterfaceDeclaration') {
+				const constant = stmt.body.members[0];
+				if (constant?.kind === 'ClassConstDeclaration') {
+					expect(constant.type?.kind).toBe('SimpleType');
+				}
+			}
+		});
 	});
 
 	describe('trait usage', () => {

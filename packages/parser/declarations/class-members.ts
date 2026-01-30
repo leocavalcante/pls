@@ -190,6 +190,10 @@ export function parseClassConstant(
 	const start = attributes.length > 0 ? attributes[0].loc.start : ctx.current().start;
 	ctx.advance();
 
+	let type = null;
+	if (isTypeStart(ctx) && ctx.peek(1).type !== TokenType.Assign) {
+		type = parseTypeNode(ctx);
+	}
 	const name = parseIdentifier();
 	ctx.expect(TokenType.Assign, 'Expected "=" after constant name');
 	const value = expr.parseExpression();
@@ -198,6 +202,7 @@ export function parseClassConstant(
 	return {
 		kind: 'ClassConstDeclaration',
 		name,
+		type,
 		value,
 		visibility: modifiers.visibility,
 		isFinal: modifiers.isFinal,

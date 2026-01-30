@@ -1,6 +1,7 @@
 import {
 	type AttributeGroup,
 	type BlockStatement,
+	type EmptyStatement,
 	type Identifier,
 	type InlineHtml,
 	type Statement,
@@ -82,6 +83,10 @@ export class StatementParser {
 	}
 
 	private tryParseSimpleStatements(): Statement | null {
+		if (this.ctx.check(TokenType.Semicolon)) {
+			return this.parseEmptyStatement();
+		}
+
 		if (this.ctx.check(TokenType.Echo)) {
 			return parseEchoStatement(this.ctx, this.simpleCallbacks());
 		}
@@ -226,6 +231,14 @@ export class StatementParser {
 		};
 	}
 
+	private parseEmptyStatement(): EmptyStatement {
+		const token = this.ctx.advance();
+		return {
+			kind: 'EmptyStatement',
+			loc: createLocation(token.start, token.end),
+		};
+	}
+
 	private isClassStart(): boolean {
 		return (
 			this.ctx.check(TokenType.Class) ||
@@ -300,6 +313,7 @@ export class StatementParser {
 			parseExpression: () => this.expr.parseExpression(),
 			parseBlockStatement: () => this.parseBlockStatement(),
 			parseVariable: () => this.expr.parseVariable(),
+			parseQualifiedIdentifier: () => this.getDecl().parseQualifiedIdentifier(),
 		};
 	}
 
@@ -333,4 +347,5 @@ interface DeclarationParserInterface {
 	parseConstStatement(): Statement;
 	parseGlobalStatement(): Statement;
 	parseStaticVariableStatement(): Statement;
+	parseQualifiedIdentifier(): Identifier;
 }

@@ -88,8 +88,14 @@ export class ExpressionParser {
 		return parseMatchExpression(this.ctx, () => this.parseExpression());
 	}
 
-	parseArguments(): Argument[] {
+	parseArguments(): { args: Argument[]; isFirstClassCallable: boolean } {
 		const args: Argument[] = [];
+
+		// Check for first-class callable syntax: (...)
+		if (this.ctx.check(TokenType.Ellipsis) && this.ctx.peek(1).type === TokenType.CloseParen) {
+			this.ctx.advance();
+			return { args: [], isFirstClassCallable: true };
+		}
 
 		if (!this.ctx.check(TokenType.CloseParen)) {
 			do {
@@ -128,7 +134,7 @@ export class ExpressionParser {
 			} while (this.ctx.match(TokenType.Comma));
 		}
 
-		return args;
+		return { args, isFirstClassCallable: false };
 	}
 
 	parseIncludeExpression(): IncludeExpression {
@@ -287,6 +293,7 @@ export class ExpressionParser {
 			() => this.parseMemberExpression(),
 			() => this.parseArguments(),
 			() => this.parseExpression(),
+			() => this.parsePropertyName(),
 		);
 	}
 

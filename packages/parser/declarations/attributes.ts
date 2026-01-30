@@ -48,9 +48,10 @@ export function parseAttribute(
 ): Attribute {
 	const name = parseQualifiedIdentifier();
 
-	let args: ReturnType<typeof expr.parseArguments> = [];
+	let args: ReturnType<typeof expr.parseArguments>['args'] = [];
 	if (ctx.match(TokenType.OpenParen)) {
-		args = expr.parseArguments();
+		const result = expr.parseArguments();
+		args = result.args;
 		ctx.expect(TokenType.CloseParen, 'Expected ")" after attribute arguments');
 	}
 
