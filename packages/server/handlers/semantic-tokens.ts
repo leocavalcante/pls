@@ -851,7 +851,7 @@ function emitToken(
 ): void {
 	const line = node.loc.start.line - 1;
 	const char = node.loc.start.column - 1;
-	const length = node.name.length;
+	const length = node.loc.end.column - node.loc.start.column;
 
 	builder.push(line, char, length, type, modifiers);
 }
