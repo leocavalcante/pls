@@ -1,11 +1,22 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Parser, type Program } from '@pls/parser';
-import type { RenameFilesParams } from 'vscode-languageserver';
+import type {
+	CreateFilesParams,
+	DeleteFilesParams,
+	RenameFilesParams,
+} from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { DefinitionIndex } from '../definition-index';
 import type { Psr4Config } from '../psr4-resolver';
 import type { ReferenceIndex } from '../reference-index';
-import { createWillRenameFilesHandler } from './file-operations';
+import {
+	createDidCreateFilesHandler,
+	createDidDeleteFilesHandler,
+	createDidRenameFilesHandler,
+	createWillCreateFilesHandler,
+	createWillDeleteFilesHandler,
+	createWillRenameFilesHandler,
+} from './file-operations';
 
 const parser = new Parser();
 
@@ -46,6 +57,8 @@ function createMockPsr4Config(): Psr4Config {
 }
 
 function createMockDefinitionIndex(): DefinitionIndex {
+	const calls: { method: string; args: unknown[] }[] = [];
+
 	return {
 		addDefinition: () => {},
 		removeDefinitionsForUri: () => {},
@@ -54,16 +67,44 @@ function createMockDefinitionIndex(): DefinitionIndex {
 		getAllSymbols: () => [],
 		searchSymbols: () => [],
 		clear: () => {},
-	} as unknown as DefinitionIndex;
+		indexDocument: (uri: string, _ast: Program) => {
+			calls.push({ method: 'indexDocument', args: [uri] });
+		},
+		clearDocument: (uri: string) => {
+			calls.push({ method: 'clearDocument', args: [uri] });
+		},
+		getCalls: () => calls,
+		resetCalls: () => {
+			calls.length = 0;
+		},
+	} as unknown as DefinitionIndex & {
+		getCalls: () => { method: string; args: unknown[] }[];
+		resetCalls: () => void;
+	};
 }
 
 function createMockReferenceIndex(): ReferenceIndex {
+	const calls: { method: string; args: unknown[] }[] = [];
+
 	return {
 		addReference: () => {},
 		removeReferencesForUri: () => {},
 		findReferences: () => [],
 		clear: () => {},
-	} as unknown as ReferenceIndex;
+		indexDocument: (uri: string, _ast: Program) => {
+			calls.push({ method: 'indexDocument', args: [uri] });
+		},
+		clearDocument: (uri: string) => {
+			calls.push({ method: 'clearDocument', args: [uri] });
+		},
+		getCalls: () => calls,
+		resetCalls: () => {
+			calls.length = 0;
+		},
+	} as unknown as ReferenceIndex & {
+		getCalls: () => { method: string; args: unknown[] }[];
+		resetCalls: () => void;
+	};
 }
 
 describe('File Operations', () => {
@@ -516,6 +557,401 @@ class SomeClass
 			expect(
 				result?.changes?.['file:///workspace/vendor/package/src/SomeClass.php'],
 			).toBeUndefined();
+		});
+	});
+
+	describe('createWillCreateFilesHandler', () => {
+		let psr4Config: Psr4Config | null;
+		let workspaceRoot: string;
+
+		beforeEach(() => {
+			psr4Config = createMockPsr4Config();
+			workspaceRoot = '/workspace';
+		});
+
+		function createHandler() {
+			return createWillCreateFilesHandler(
+				async () => psr4Config,
+				() => workspaceRoot,
+			);
+		}
+
+		test('generates PHP file content with namespace and class', async () => {
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/src/Models/User.php' }],
+			};
+
+			const result = await handler(params);
+
+			expect(result).not.toBeNull();
+			const edits = result?.changes?.['file:///workspace/src/Models/User.php'];
+			expect(edits).toBeDefined();
+			expect(edits?.length).toBeGreaterThan(0);
+
+			const content = edits?.[0]?.newText;
+			expect(content).toContain('<?php');
+			expect(content).toContain('namespace App\\Models');
+			expect(content).toContain('class User');
+		});
+
+		test('skips non-PHP files', async () => {
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/README.txt' }],
+			};
+
+			const result = await handler(params);
+
+			expect(result).toBeNull();
+		});
+
+		test('skips vendor directory', async () => {
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/vendor/package/src/SomeClass.php' }],
+			};
+
+			const result = await handler(params);
+
+			expect(result).toBeNull();
+		});
+
+		test('handles files without PSR-4 mapping', async () => {
+			psr4Config = null;
+
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/Helper.php' }],
+			};
+
+			const result = await handler(params);
+
+			expect(result).not.toBeNull();
+			const edits = result?.changes?.['file:///workspace/Helper.php'];
+			expect(edits).toBeDefined();
+
+			const content = edits?.[0]?.newText;
+			expect(content).toContain('<?php');
+			expect(content).toContain('class Helper');
+			expect(content).not.toContain('namespace');
+		});
+
+		test('handles batch file creation', async () => {
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [
+					{ uri: 'file:///workspace/src/Models/User.php' },
+					{ uri: 'file:///workspace/src/Models/Post.php' },
+				],
+			};
+
+			const result = await handler(params);
+
+			expect(result).not.toBeNull();
+			expect(result?.changes?.['file:///workspace/src/Models/User.php']).toBeDefined();
+			expect(result?.changes?.['file:///workspace/src/Models/Post.php']).toBeDefined();
+		});
+
+		test('returns null when no workspace root', async () => {
+			const handler = createWillCreateFilesHandler(
+				async () => psr4Config,
+				() => null,
+			);
+
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/src/Models/User.php' }],
+			};
+
+			const result = await handler(params);
+
+			expect(result).toBeNull();
+		});
+
+		test('returns null when no PHP files to create', async () => {
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/config.json' }],
+			};
+
+			const result = await handler(params);
+
+			expect(result).toBeNull();
+		});
+	});
+
+	describe('createWillDeleteFilesHandler', () => {
+		test('returns null (no-op)', async () => {
+			const handler = createWillDeleteFilesHandler();
+			const params: DeleteFilesParams = {
+				files: [{ uri: 'file:///workspace/src/Models/User.php' }],
+			};
+
+			const result = await handler(params);
+
+			expect(result).toBeNull();
+		});
+
+		test('returns null for multiple files', async () => {
+			const handler = createWillDeleteFilesHandler();
+			const params: DeleteFilesParams = {
+				files: [
+					{ uri: 'file:///workspace/src/Models/User.php' },
+					{ uri: 'file:///workspace/src/Models/Post.php' },
+				],
+			};
+
+			const result = await handler(params);
+
+			expect(result).toBeNull();
+		});
+	});
+
+	describe('createDidCreateFilesHandler', () => {
+		let asts: Map<string, Program>;
+		let defIndex: ReturnType<typeof createMockDefinitionIndex>;
+		let refIndex: ReturnType<typeof createMockReferenceIndex>;
+
+		beforeEach(() => {
+			asts = new Map();
+			defIndex = createMockDefinitionIndex();
+			refIndex = createMockReferenceIndex();
+		});
+
+		function createHandler() {
+			return createDidCreateFilesHandler((uri) => asts.get(uri) ?? null, defIndex, refIndex);
+		}
+
+		test('indexes new PHP file', () => {
+			const phpContent = '<?php namespace App; class User {}';
+			const ast = parser.parse(phpContent);
+			asts.set('file:///workspace/src/Models/User.php', ast);
+
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/src/Models/User.php' }],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.some((c) => c.method === 'indexDocument')).toBe(true);
+
+			const refCalls = refIndex.getCalls();
+			expect(refCalls.some((c) => c.method === 'indexDocument')).toBe(true);
+		});
+
+		test('skips non-PHP files', () => {
+			defIndex.resetCalls();
+			refIndex.resetCalls();
+
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/config.json' }],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.length).toBe(0);
+
+			const refCalls = refIndex.getCalls();
+			expect(refCalls.length).toBe(0);
+		});
+
+		test('skips files without AST', () => {
+			defIndex.resetCalls();
+			refIndex.resetCalls();
+
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [{ uri: 'file:///workspace/src/Models/User.php' }],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.length).toBe(0);
+
+			const refCalls = refIndex.getCalls();
+			expect(refCalls.length).toBe(0);
+		});
+
+		test('indexes multiple files', () => {
+			const phpContent = '<?php namespace App; class Test {}';
+			const ast1 = parser.parse(phpContent);
+			const ast2 = parser.parse(phpContent);
+			asts.set('file:///workspace/src/Models/User.php', ast1);
+			asts.set('file:///workspace/src/Models/Post.php', ast2);
+
+			const handler = createHandler();
+			const params: CreateFilesParams = {
+				files: [
+					{ uri: 'file:///workspace/src/Models/User.php' },
+					{ uri: 'file:///workspace/src/Models/Post.php' },
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.filter((c) => c.method === 'indexDocument').length).toBe(2);
+
+			const refCalls = refIndex.getCalls();
+			expect(refCalls.filter((c) => c.method === 'indexDocument').length).toBe(2);
+		});
+	});
+
+	describe('createDidRenameFilesHandler', () => {
+		let asts: Map<string, Program>;
+		let defIndex: ReturnType<typeof createMockDefinitionIndex>;
+		let refIndex: ReturnType<typeof createMockReferenceIndex>;
+
+		beforeEach(() => {
+			asts = new Map();
+			defIndex = createMockDefinitionIndex();
+			refIndex = createMockReferenceIndex();
+		});
+
+		function createHandler() {
+			return createDidRenameFilesHandler((uri) => asts.get(uri) ?? null, defIndex, refIndex);
+		}
+
+		test('clears old URI and indexes new URI', () => {
+			const phpContent = '<?php namespace App; class User {}';
+			const ast = parser.parse(phpContent);
+			asts.set('file:///workspace/src/Models/Account.php', ast);
+
+			const handler = createHandler();
+			const params: RenameFilesParams = {
+				files: [
+					{
+						oldUri: 'file:///workspace/src/Models/User.php',
+						newUri: 'file:///workspace/src/Models/Account.php',
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.some((c) => c.method === 'clearDocument')).toBe(true);
+			expect(defCalls.some((c) => c.method === 'indexDocument')).toBe(true);
+
+			const refCalls = refIndex.getCalls();
+			expect(refCalls.some((c) => c.method === 'clearDocument')).toBe(true);
+			expect(refCalls.some((c) => c.method === 'indexDocument')).toBe(true);
+		});
+
+		test('skips non-PHP files', () => {
+			defIndex.resetCalls();
+			refIndex.resetCalls();
+
+			const handler = createHandler();
+			const params: RenameFilesParams = {
+				files: [
+					{
+						oldUri: 'file:///workspace/config.json',
+						newUri: 'file:///workspace/settings.json',
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			const indexCalls = defCalls.filter((c) => c.method === 'indexDocument');
+			expect(indexCalls.length).toBe(0);
+		});
+
+		test('handles batch renames', () => {
+			const phpContent = '<?php namespace App; class Test {}';
+			const ast1 = parser.parse(phpContent);
+			const ast2 = parser.parse(phpContent);
+			asts.set('file:///workspace/src/Models/Account.php', ast1);
+			asts.set('file:///workspace/src/Models/BlogPost.php', ast2);
+
+			const handler = createHandler();
+			const params: RenameFilesParams = {
+				files: [
+					{
+						oldUri: 'file:///workspace/src/Models/User.php',
+						newUri: 'file:///workspace/src/Models/Account.php',
+					},
+					{
+						oldUri: 'file:///workspace/src/Models/Post.php',
+						newUri: 'file:///workspace/src/Models/BlogPost.php',
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.filter((c) => c.method === 'clearDocument').length).toBe(2);
+			expect(defCalls.filter((c) => c.method === 'indexDocument').length).toBe(2);
+		});
+	});
+
+	describe('createDidDeleteFilesHandler', () => {
+		let defIndex: ReturnType<typeof createMockDefinitionIndex>;
+		let refIndex: ReturnType<typeof createMockReferenceIndex>;
+
+		beforeEach(() => {
+			defIndex = createMockDefinitionIndex();
+			refIndex = createMockReferenceIndex();
+		});
+
+		function createHandler() {
+			return createDidDeleteFilesHandler(defIndex, refIndex);
+		}
+
+		test('clears deleted file from indexes', () => {
+			const handler = createHandler();
+			const params: DeleteFilesParams = {
+				files: [{ uri: 'file:///workspace/src/Models/User.php' }],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.some((c) => c.method === 'clearDocument')).toBe(true);
+
+			const refCalls = refIndex.getCalls();
+			expect(refCalls.some((c) => c.method === 'clearDocument')).toBe(true);
+		});
+
+		test('handles multiple deleted files', () => {
+			const handler = createHandler();
+			const params: DeleteFilesParams = {
+				files: [
+					{ uri: 'file:///workspace/src/Models/User.php' },
+					{ uri: 'file:///workspace/src/Models/Post.php' },
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.filter((c) => c.method === 'clearDocument').length).toBe(2);
+
+			const refCalls = refIndex.getCalls();
+			expect(refCalls.filter((c) => c.method === 'clearDocument').length).toBe(2);
+		});
+
+		test('clears files regardless of extension', () => {
+			const handler = createHandler();
+			const params: DeleteFilesParams = {
+				files: [
+					{ uri: 'file:///workspace/src/Models/User.php' },
+					{ uri: 'file:///workspace/config.json' },
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.filter((c) => c.method === 'clearDocument').length).toBe(2);
 		});
 	});
 });

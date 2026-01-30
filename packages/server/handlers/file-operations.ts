@@ -1,5 +1,11 @@
 import type { Program } from '@pls/parser';
-import type { RenameFilesParams, TextEdit, WorkspaceEdit } from 'vscode-languageserver';
+import type {
+	CreateFilesParams,
+	DeleteFilesParams,
+	RenameFilesParams,
+	TextEdit,
+	WorkspaceEdit,
+} from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { DefinitionIndex } from '../definition-index';
 import {
@@ -9,6 +15,7 @@ import {
 	findNamespaceStatement,
 	findTypeDeclarations,
 	findUseStatements,
+	generatePhpFileContent,
 } from '../file-operation-utils';
 import {
 	type Psr4Config,
@@ -181,4 +188,113 @@ function updateImportStatementsAcrossWorkspace(
 			changes[docUri] = docEdits;
 		}
 	}
+}
+
+export function createWillCreateFilesHandler(
+	getPsr4Config: () => Promise<Psr4Config | null>,
+	getWorkspaceRoot: () => string | null,
+) {
+	return async (params: CreateFilesParams): Promise<WorkspaceEdit | null> => {
+		const changes: Record<string, TextEdit[]> = {};
+		const workspaceRoot = getWorkspaceRoot();
+
+		if (!workspaceRoot) {
+			return null;
+		}
+
+		const psr4Config = await getPsr4Config();
+
+		for (const file of params.files) {
+			if (shouldSkipFile(file.uri)) {
+				continue;
+			}
+
+			const namespace = psr4Config
+				? calculateNamespaceFromPath(file.uri, workspaceRoot, psr4Config)
+				: null;
+
+			const className = calculateClassNameFromPath(file.uri);
+
+			if (!className) {
+				continue;
+			}
+
+			const content = generatePhpFileContent(namespace, className);
+
+			changes[file.uri] = [
+				{
+					range: {
+						start: { line: 0, character: 0 },
+						end: { line: 0, character: 0 },
+					},
+					newText: content,
+				},
+			];
+		}
+
+		if (Object.keys(changes).length === 0) {
+			return null;
+		}
+
+		return { changes };
+	};
+}
+
+export function createWillDeleteFilesHandler() {
+	return async (): Promise<WorkspaceEdit | null> => {
+		return null;
+	};
+}
+
+export function createDidCreateFilesHandler(
+	getAst: (uri: string) => Program | null,
+	definitionIndex: DefinitionIndex,
+	referenceIndex: ReferenceIndex,
+) {
+	return (params: CreateFilesParams): void => {
+		for (const file of params.files) {
+			if (!isPhpFile(file.uri)) continue;
+
+			const ast = getAst(file.uri);
+			if (ast) {
+				definitionIndex.indexDocument(file.uri, ast);
+				referenceIndex.indexDocument(file.uri, ast);
+			}
+		}
+	};
+}
+
+export function createDidRenameFilesHandler(
+	getAst: (uri: string) => Program | null,
+	definitionIndex: DefinitionIndex,
+	referenceIndex: ReferenceIndex,
+) {
+	return (params: RenameFilesParams): void => {
+		for (const file of params.files) {
+			// Clear old URI from indexes
+			definitionIndex.clearDocument(file.oldUri);
+			referenceIndex.clearDocument(file.oldUri);
+
+			// Index at new URI
+			if (isPhpFile(file.newUri)) {
+				const ast = getAst(file.newUri);
+				if (ast) {
+					definitionIndex.indexDocument(file.newUri, ast);
+					referenceIndex.indexDocument(file.newUri, ast);
+				}
+			}
+		}
+	};
+}
+
+export function createDidDeleteFilesHandler(
+	definitionIndex: DefinitionIndex,
+	referenceIndex: ReferenceIndex,
+) {
+	return (params: DeleteFilesParams): void => {
+		for (const file of params.files) {
+			definitionIndex.clearDocument(file.uri);
+			referenceIndex.clearDocument(file.uri);
+		}
+	};
 }
