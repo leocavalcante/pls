@@ -132,10 +132,7 @@ export function createUseStatementEdit(
 	};
 }
 
-export function generatePhpFileContent(
-	namespace: string | null,
-	className: string,
-): string {
+export function generatePhpFileContent(namespace: string | null, className: string): string {
 	let content = '<?php\n\n';
 
 	if (namespace) {

@@ -80,9 +80,7 @@ describe('File Operation Utilities', () => {
 		});
 
 		test('finds mixed declarations', () => {
-			const ast = parser.parse(
-				'<?php class A {} interface B {} trait C {} enum Status {}',
-			);
+			const ast = parser.parse('<?php class A {} interface B {} trait C {} enum Status {}');
 			const types = findTypeDeclarations(ast);
 			expect(types).toHaveLength(4);
 		});
@@ -94,9 +92,7 @@ describe('File Operation Utilities', () => {
 		});
 
 		test('finds declarations in namespaced and non-namespaced context', () => {
-			const ast = parser.parse(
-				'<?php class Global {} namespace App; class Namespaced {}',
-			);
+			const ast = parser.parse('<?php class Global {} namespace App; class Namespaced {}');
 			const types = findTypeDeclarations(ast);
 			expect(types).toHaveLength(2);
 		});
@@ -123,9 +119,7 @@ describe('File Operation Utilities', () => {
 		});
 
 		test('finds multiple class use statements', () => {
-			const ast = parser.parse(
-				'<?php use App\\Models\\User; use App\\Models\\Post;',
-			);
+			const ast = parser.parse('<?php use App\\Models\\User; use App\\Models\\Post;');
 			const uses = findUseStatements(ast);
 			expect(uses).toHaveLength(2);
 		});
@@ -159,12 +153,7 @@ describe('File Operation Utilities', () => {
 		});
 
 		test('returns null when namespace not found', () => {
-			const doc = TextDocument.create(
-				'file:///test.php',
-				'php',
-				1,
-				'<?php\nclass Test {}',
-			);
+			const doc = TextDocument.create('file:///test.php', 'php', 1, '<?php\nclass Test {}');
 			const edit = createNamespaceEdit(doc, 'Old', 'New');
 			expect(edit).toBeNull();
 		});
@@ -199,12 +188,7 @@ describe('File Operation Utilities', () => {
 			const declaration = findTypeDeclarations(ast)[0];
 			if (!declaration) throw new Error('No declaration found');
 
-			const doc = TextDocument.create(
-				'file:///test.php',
-				'php',
-				1,
-				'<?php class OldName {}',
-			);
+			const doc = TextDocument.create('file:///test.php', 'php', 1, '<?php class OldName {}');
 
 			const edit = createTypeNameEdit(doc, declaration, 'NewName');
 			expect(edit.newText).toBe('NewName');
@@ -231,12 +215,7 @@ describe('File Operation Utilities', () => {
 			const declaration = findTypeDeclarations(ast)[0];
 			if (!declaration) throw new Error('No declaration found');
 
-			const doc = TextDocument.create(
-				'file:///test.php',
-				'php',
-				1,
-				'<?php trait OldTrait {}',
-			);
+			const doc = TextDocument.create('file:///test.php', 'php', 1, '<?php trait OldTrait {}');
 
 			const edit = createTypeNameEdit(doc, declaration, 'NewTrait');
 			expect(edit.newText).toBe('NewTrait');
@@ -247,12 +226,7 @@ describe('File Operation Utilities', () => {
 			const declaration = findTypeDeclarations(ast)[0];
 			if (!declaration) throw new Error('No declaration found');
 
-			const doc = TextDocument.create(
-				'file:///test.php',
-				'php',
-				1,
-				'<?php enum OldEnum {}',
-			);
+			const doc = TextDocument.create('file:///test.php', 'php', 1, '<?php enum OldEnum {}');
 
 			const edit = createTypeNameEdit(doc, declaration, 'NewEnum');
 			expect(edit.newText).toBe('NewEnum');
@@ -265,20 +239,9 @@ describe('File Operation Utilities', () => {
 			const useStmt = findUseStatements(ast)[0];
 			if (!useStmt) throw new Error('No use statement found');
 
-			const doc = TextDocument.create(
-				'file:///test.php',
-				'php',
-				1,
-				'<?php use Old\\Class\\Name;',
-			);
+			const doc = TextDocument.create('file:///test.php', 'php', 1, '<?php use Old\\Class\\Name;');
 
-			const edit = createUseStatementEdit(
-				doc,
-				useStmt,
-				0,
-				'Old\\Class\\Name',
-				'New\\Class\\Name',
-			);
+			const edit = createUseStatementEdit(doc, useStmt, 0, 'Old\\Class\\Name', 'New\\Class\\Name');
 			expect(edit).not.toBeNull();
 			expect(edit?.newText).toBe('New\\Class\\Name');
 		});
@@ -288,20 +251,9 @@ describe('File Operation Utilities', () => {
 			const useStmt = findUseStatements(ast)[0];
 			if (!useStmt) throw new Error('No use statement found');
 
-			const doc = TextDocument.create(
-				'file:///test.php',
-				'php',
-				1,
-				'<?php use Old\\Class\\Name;',
-			);
+			const doc = TextDocument.create('file:///test.php', 'php', 1, '<?php use Old\\Class\\Name;');
 
-			const edit = createUseStatementEdit(
-				doc,
-				useStmt,
-				5,
-				'Old\\Class\\Name',
-				'New\\Class\\Name',
-			);
+			const edit = createUseStatementEdit(doc, useStmt, 5, 'Old\\Class\\Name', 'New\\Class\\Name');
 			expect(edit).toBeNull();
 		});
 
@@ -317,13 +269,7 @@ describe('File Operation Utilities', () => {
 				'<?php use One\\ClassA, Two\\ClassB;',
 			);
 
-			const edit = createUseStatementEdit(
-				doc,
-				useStmt,
-				1,
-				'Two\\ClassB',
-				'New\\ClassB',
-			);
+			const edit = createUseStatementEdit(doc, useStmt, 1, 'Two\\ClassB', 'New\\ClassB');
 			expect(edit).not.toBeNull();
 			expect(edit?.newText).toBe('New\\ClassB');
 		});
