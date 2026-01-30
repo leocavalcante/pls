@@ -44,6 +44,7 @@ When you use [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/co
 | **Folding Ranges** | Collapse code blocks |
 | **Document Links** | Clickable paths in require/include |
 | **Formatting** | Code formatting (document and range) |
+| **File Operations** | Auto-update namespaces, classes, and imports on file rename/move |
 
 ## 🎨 Formatter
 
@@ -57,6 +58,40 @@ PLS includes a built-in opinionated PHP formatter. It handles:
 - **String literals**: Content never modified
 
 The formatter respects your editor's settings for tab size and spaces vs tabs.
+
+## 📁 File Operations
+
+PLS automatically handles namespace and class name updates when PHP files are renamed or moved. This feature follows PSR-4 autoloading conventions.
+
+**What happens when you rename/move a PHP file:**
+
+1. **Namespace update** - The namespace declaration is updated to match the new file path
+2. **Class name update** - If the class name matches the old filename, it's renamed to match the new filename
+3. **Import updates** - All `use` statements referencing the renamed class are updated across the workspace
+
+**Example:**
+
+Rename `src/Models/User.php` to `src/Entities/Account.php`:
+
+```php
+// Before
+namespace App\Models;
+class User { }
+
+// After
+namespace App\Entities;
+class Account { }
+```
+
+All files importing `App\Models\User` are automatically updated to `App\Entities\Account`.
+
+**Requirements:**
+- A `composer.json` with PSR-4 autoload configuration at the workspace root
+- Files must be in paths mapped by PSR-4 autoload rules
+
+**Editor support:**
+- **VS Code**: Works automatically with the PLS extension
+- **Neovim**: Works with the built-in plugin; consider [nvim-lsp-file-operations](https://github.com/antosha417/nvim-lsp-file-operations) for enhanced file tree integration
 
 ## 📦 Installation
 
@@ -187,7 +222,7 @@ bun test --watch
 bun run test:coverage
 ```
 
-**Current status**: 939 tests passing with ~93% line coverage.
+**Current status**: 1054 tests passing with ~93% line coverage.
 
 ## 🛠️ Development
 

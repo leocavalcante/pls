@@ -51,6 +51,25 @@ require('pls').setup({
 })
 ```
 
+## File Operations
+
+PLS supports automatic namespace/class updates when files are renamed, created, or deleted. This feature is enabled by default.
+
+For the best experience with file operations (automatic import updates when renaming files), consider using [nvim-lsp-file-operations](https://github.com/antosha417/nvim-lsp-file-operations):
+
+```lua
+{
+  'antosha417/nvim-lsp-file-operations',
+  dependencies = {
+    'nvim-lua/plenary.nvim',
+    'nvim-tree/nvim-tree.lua',  -- or neo-tree, etc.
+  },
+  config = function()
+    require('lsp-file-operations').setup()
+  end,
+}
+```
+
 ## Health Check
 
 Run `:checkhealth pls` to verify your setup.
