@@ -17,23 +17,34 @@ import {
 	createPrepareCallHierarchyHandler,
 } from './handlers/call-hierarchy';
 import { createCodeActionHandler } from './handlers/code-actions';
+import { createCodeLensHandler, createCodeLensResolveHandler } from './handlers/code-lens';
 import { createCompletionHandler } from './handlers/completion';
+import { createDeclarationHandler } from './handlers/declaration';
 import { createDefinitionHandler } from './handlers/definition';
 import { createDiagnosticHandler } from './handlers/diagnostics';
 import { createDocumentHighlightsHandler } from './handlers/document-highlights';
 import { createDocumentLinksHandler } from './handlers/document-links';
+import { createExecuteCommandHandler, getRegisteredCommands } from './handlers/execute-command';
 import { createFoldingRangeHandler } from './handlers/folding-range';
 import { createFormattingHandler, createRangeFormattingHandler } from './handlers/formatting';
 import { createHoverHandler } from './handlers/hover';
+import { createImplementationHandler } from './handlers/implementation';
 import { createInlayHintsHandler } from './handlers/inlay-hints';
+import { createLinkedEditingHandler } from './handlers/linked-editing';
+import {
+	ON_TYPE_TRIGGER_CHARACTERS,
+	createOnTypeFormattingHandler,
+} from './handlers/on-type-formatting';
 import { createReferencesHandler } from './handlers/references';
 import { createPrepareRenameHandler, createRenameHandler } from './handlers/rename';
+import { createSelectionRangeHandler } from './handlers/selection-range';
 import {
 	createSemanticTokensHandler,
 	tokenModifiers,
 	tokenTypes,
 } from './handlers/semantic-tokens';
 import { createSignatureHelpHandler } from './handlers/signature-help';
+import { createTypeDefinitionHandler } from './handlers/type-definition';
 import { createTypeHierarchyHandler } from './handlers/type-hierarchy';
 import { createWorkspaceSymbolsHandler } from './handlers/workspace-symbols';
 import { ReferenceIndex } from './reference-index';
@@ -49,9 +60,11 @@ const parser = new Parser();
 
 let backgroundIndexer: BackgroundIndexer | null = null;
 let initializeParams: InitializeParams;
+let workspaceFolders: { uri: string; name: string }[] = [];
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
 	initializeParams = params;
+	workspaceFolders = params.workspaceFolders ?? [];
 	connection.console.log('PHP Language Server initializing...');
 
 	return {
@@ -60,6 +73,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			documentSymbolProvider: true,
 			hoverProvider: true,
 			definitionProvider: true,
+			declarationProvider: true,
+			implementationProvider: true,
+			typeDefinitionProvider: true,
 			referencesProvider: true,
 			completionProvider: {
 				triggerCharacters: ['$', '>', ':'],
@@ -70,6 +86,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			workspaceSymbolProvider: true,
 			documentFormattingProvider: true,
 			documentRangeFormattingProvider: true,
+			documentOnTypeFormattingProvider: {
+				firstTriggerCharacter: ON_TYPE_TRIGGER_CHARACTERS[0],
+				moreTriggerCharacter: [...ON_TYPE_TRIGGER_CHARACTERS.slice(1)],
+			},
 			renameProvider: {
 				prepareProvider: true,
 			},
@@ -93,6 +113,20 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 				resolveProvider: false,
 			},
 			foldingRangeProvider: true,
+			selectionRangeProvider: true,
+			linkedEditingRangeProvider: true,
+			codeLensProvider: {
+				resolveProvider: true,
+			},
+			executeCommandProvider: {
+				commands: getRegisteredCommands(),
+			},
+			workspace: {
+				workspaceFolders: {
+					supported: true,
+					changeNotifications: true,
+				},
+			},
 		},
 		serverInfo: {
 			name: 'pls',
@@ -114,6 +148,18 @@ connection.onInitialized(() => {
 	if (backgroundIndexer) {
 		backgroundIndexer.start();
 	}
+});
+
+connection.workspace.onDidChangeWorkspaceFolders((event) => {
+	for (const removed of event.removed) {
+		workspaceFolders = workspaceFolders.filter((f) => f.uri !== removed.uri);
+	}
+
+	for (const added of event.added) {
+		workspaceFolders.push({ uri: added.uri, name: added.name });
+	}
+
+	connection.console.log(`Workspace folders changed: ${workspaceFolders.length} folder(s)`);
 });
 
 documents.onDidOpen((event) => {
@@ -168,6 +214,20 @@ connection.onHover(
 
 connection.onDefinition(createDefinitionHandler((uri) => documents.get(uri), definitionIndex));
 
+connection.onDeclaration(createDeclarationHandler((uri) => documents.get(uri), definitionIndex));
+
+connection.onImplementation(
+	createImplementationHandler((uri) => documents.get(uri), definitionIndex),
+);
+
+connection.onTypeDefinition(
+	createTypeDefinitionHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+	),
+);
+
 connection.onReferences(
 	createReferencesHandler(
 		(uri) => documents.get(uri),
@@ -193,6 +253,8 @@ connection.onDocumentFormatting(createFormattingHandler((uri) => documents.get(u
 
 connection.onDocumentRangeFormatting(createRangeFormattingHandler((uri) => documents.get(uri)));
 
+connection.onDocumentOnTypeFormatting(createOnTypeFormattingHandler((uri) => documents.get(uri)));
+
 connection.onPrepareRename(
 	createPrepareRenameHandler((uri) => documents.get(uri), definitionIndex),
 );
@@ -212,6 +274,8 @@ connection.onCodeAction(
 		definitionIndex,
 	),
 );
+
+connection.onExecuteCommand(createExecuteCommandHandler());
 
 connection.languages.diagnostics.on(
 	createDiagnosticHandler((uri) => documents.get(uri), documentManager),
@@ -272,6 +336,24 @@ connection.onFoldingRanges(
 		(uri) => documentManager.getAst(uri),
 	),
 );
+
+connection.onSelectionRanges(
+	createSelectionRangeHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+	),
+);
+
+connection.languages.onLinkedEditingRange(createLinkedEditingHandler((uri) => documents.get(uri)));
+
+connection.onCodeLens(
+	createCodeLensHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+	),
+);
+
+connection.onCodeLensResolve(createCodeLensResolveHandler(definitionIndex, referenceIndex));
 
 documents.listen(connection);
 

@@ -178,7 +178,10 @@ function formatPhp(text: string, options: FormattingOptions): string {
 		line = formatLineSpacing(trimmed);
 		result.push(indent.repeat(Math.max(0, currentIndent + continuationIndent)) + line);
 
-		state.indentLevel = Math.max(0, state.indentLevel + lineIndentDelta.before + lineIndentDelta.after);
+		state.indentLevel = Math.max(
+			0,
+			state.indentLevel + lineIndentDelta.before + lineIndentDelta.after,
+		);
 
 		if (isCaseOrDefault) {
 			state.inCaseBlock = true;

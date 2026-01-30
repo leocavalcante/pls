@@ -217,7 +217,15 @@ function createTextEditsForDocument(
 
 		for (let lineNum = 0; lineNum < lines.length; lineNum++) {
 			const line = lines[lineNum];
-			const matches = collectMatchesInLine(line, lineNum, regex, replacement, docText, renameType, name);
+			const matches = collectMatchesInLine(
+				line,
+				lineNum,
+				regex,
+				replacement,
+				docText,
+				renameType,
+				name,
+			);
 
 			for (const match of matches) {
 				edits.push({
