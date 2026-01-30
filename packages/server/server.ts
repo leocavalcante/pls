@@ -25,6 +25,14 @@ import { createDiagnosticHandler } from './handlers/diagnostics';
 import { createDocumentHighlightsHandler } from './handlers/document-highlights';
 import { createDocumentLinksHandler } from './handlers/document-links';
 import { createExecuteCommandHandler, getRegisteredCommands } from './handlers/execute-command';
+import {
+	createDidCreateFilesHandler,
+	createDidDeleteFilesHandler,
+	createDidRenameFilesHandler,
+	createWillCreateFilesHandler,
+	createWillDeleteFilesHandler,
+	createWillRenameFilesHandler,
+} from './handlers/file-operations';
 import { createFoldingRangeHandler } from './handlers/folding-range';
 import { createFormattingHandler, createRangeFormattingHandler } from './handlers/formatting';
 import { createHoverHandler } from './handlers/hover';
@@ -47,8 +55,10 @@ import { createSignatureHelpHandler } from './handlers/signature-help';
 import { createTypeDefinitionHandler } from './handlers/type-definition';
 import { createTypeHierarchyHandler } from './handlers/type-hierarchy';
 import { createWorkspaceSymbolsHandler } from './handlers/workspace-symbols';
+import { parsePsr4Config } from './psr4-resolver';
 import { ReferenceIndex } from './reference-index';
 import { SymbolExtractor } from './symbol-extractor';
+import { getWorkspaceRoot } from './workspace-scanner';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -121,12 +131,32 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			executeCommandProvider: {
 				commands: getRegisteredCommands(),
 			},
-			workspace: {
-				workspaceFolders: {
-					supported: true,
-					changeNotifications: true,
+		workspace: {
+			workspaceFolders: {
+				supported: true,
+				changeNotifications: true,
+			},
+			fileOperations: {
+				willCreate: {
+					filters: [{ pattern: { glob: '**/*.php' } }],
+				},
+				didCreate: {
+					filters: [{ pattern: { glob: '**/*.php' } }],
+				},
+				willRename: {
+					filters: [{ pattern: { glob: '**/*.php' } }],
+				},
+				didRename: {
+					filters: [{ pattern: { glob: '**/*.php' } }],
+				},
+				willDelete: {
+					filters: [{ pattern: { glob: '**/*.php' } }],
+				},
+				didDelete: {
+					filters: [{ pattern: { glob: '**/*.php' } }],
 				},
 			},
+		},
 		},
 		serverInfo: {
 			name: 'pls',
@@ -148,18 +178,20 @@ connection.onInitialized(() => {
 	if (backgroundIndexer) {
 		backgroundIndexer.start();
 	}
-});
 
-connection.workspace.onDidChangeWorkspaceFolders((event) => {
-	for (const removed of event.removed) {
-		workspaceFolders = workspaceFolders.filter((f) => f.uri !== removed.uri);
+	if (initializeParams.capabilities.workspace?.workspaceFolders) {
+		connection.workspace.onDidChangeWorkspaceFolders((event) => {
+			for (const removed of event.removed) {
+				workspaceFolders = workspaceFolders.filter((f) => f.uri !== removed.uri);
+			}
+
+			for (const added of event.added) {
+				workspaceFolders.push({ uri: added.uri, name: added.name });
+			}
+
+			connection.console.log(`Workspace folders changed: ${workspaceFolders.length} folder(s)`);
+		});
 	}
-
-	for (const added of event.added) {
-		workspaceFolders.push({ uri: added.uri, name: added.name });
-	}
-
-	connection.console.log(`Workspace folders changed: ${workspaceFolders.length} folder(s)`);
 });
 
 documents.onDidOpen((event) => {
@@ -354,6 +386,48 @@ connection.onCodeLens(
 );
 
 connection.onCodeLensResolve(createCodeLensResolveHandler(definitionIndex, referenceIndex));
+
+// File operations
+connection.workspace.onWillCreateFiles(
+	createWillCreateFilesHandler(
+		() => parsePsr4Config(getWorkspaceRoot(initializeParams) ?? ''),
+		() => getWorkspaceRoot(initializeParams),
+	),
+);
+
+connection.workspace.onDidCreateFiles(
+	createDidCreateFilesHandler(
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+		referenceIndex,
+	),
+);
+
+connection.workspace.onWillRenameFiles(
+	createWillRenameFilesHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		() => documents.all(),
+		definitionIndex,
+		referenceIndex,
+		() => parsePsr4Config(getWorkspaceRoot(initializeParams) ?? ''),
+		() => getWorkspaceRoot(initializeParams),
+	),
+);
+
+connection.workspace.onDidRenameFiles(
+	createDidRenameFilesHandler(
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+		referenceIndex,
+	),
+);
+
+connection.workspace.onWillDeleteFiles(createWillDeleteFilesHandler());
+
+connection.workspace.onDidDeleteFiles(
+	createDidDeleteFilesHandler(definitionIndex, referenceIndex),
+);
 
 documents.listen(connection);
 
