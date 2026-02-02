@@ -11,6 +11,9 @@ import {
 import { type BackgroundIndexer, createBackgroundIndexer } from './background-indexer';
 import { DefinitionIndex } from './definition-index';
 import { DocumentManager } from './document-manager';
+import { createWorkspaceDiagnosticHandler } from './handlers/diagnostics';
+import { SemanticValidator } from './semantic-validator';
+import { getConfiguration } from './configuration';
 import {
 	createCallHierarchyIncomingCallsHandler,
 	createCallHierarchyOutgoingCallsHandler,
@@ -66,6 +69,11 @@ const documentManager = new DocumentManager();
 const symbolExtractor = new SymbolExtractor();
 const definitionIndex = new DefinitionIndex();
 const referenceIndex = new ReferenceIndex();
+const semanticValidator = new SemanticValidator(
+	definitionIndex,
+	referenceIndex,
+	getConfiguration(),
+);
 const parser = new Parser();
 
 let backgroundIndexer: BackgroundIndexer | null = null;
@@ -104,10 +112,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 				prepareProvider: true,
 			},
 			codeActionProvider: true,
-			diagnosticProvider: {
-				interFileDependencies: false,
-				workspaceDiagnostics: false,
-			},
+		diagnosticProvider: {
+			interFileDependencies: true,
+			workspaceDiagnostics: true,
+		},
 			typeHierarchyProvider: true,
 			callHierarchyProvider: true,
 			documentHighlightProvider: true,
@@ -311,6 +319,15 @@ connection.onExecuteCommand(createExecuteCommandHandler());
 
 connection.languages.diagnostics.on(
 	createDiagnosticHandler((uri) => documents.get(uri), documentManager),
+);
+
+connection.languages.diagnostics.onWorkspace(
+	createWorkspaceDiagnosticHandler(
+		documentManager,
+		() => documents.all(),
+		(uri) => documentManager.getAst(uri),
+		semanticValidator,
+	),
 );
 
 const typeHierarchyHandler = createTypeHierarchyHandler(
