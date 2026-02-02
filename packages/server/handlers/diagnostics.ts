@@ -4,10 +4,14 @@ import {
 	type DocumentDiagnosticParams,
 	type DocumentDiagnosticReport,
 	DocumentDiagnosticReportKind,
+	type WorkspaceDiagnosticParams,
+	type WorkspaceDiagnosticReport,
+	type WorkspaceFullDocumentDiagnosticReport,
 } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { DocumentManager } from '../document-manager';
 import { debounce } from '../debounce';
+import type { SemanticValidator } from '../semantic-validator';
 
 export function createDiagnosticHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
@@ -34,16 +38,28 @@ export function createDiagnosticHandler(
 export function createWorkspaceDiagnosticHandler(
 	documentManager: DocumentManager,
 	getAllDocuments: () => TextDocument[],
+	getAst: (uri: string) => import('@pls/parser').Program | null,
+	semanticValidator: SemanticValidator | null = null,
 ) {
-	return (): { items: Array<{ uri: string; kind: 'full'; items: Diagnostic[] }> } => {
-		const items: Array<{ uri: string; kind: 'full'; items: Diagnostic[] }> = [];
+	return (_params: WorkspaceDiagnosticParams): WorkspaceDiagnosticReport => {
+		const items: WorkspaceFullDocumentDiagnosticReport[] = [];
 
 		for (const document of getAllDocuments()) {
-			const diagnostics = documentManager.getDiagnostics(document.uri);
+			const parseDiagnostics = documentManager.getDiagnostics(document.uri);
+			let semanticDiagnostics: Diagnostic[] = [];
+
+			if (semanticValidator) {
+				const ast = getAst(document.uri);
+				if (ast) {
+					semanticDiagnostics = semanticValidator.validateDocument(document.uri, ast);
+				}
+			}
+
 			items.push({
+				kind: DocumentDiagnosticReportKind.Full,
 				uri: document.uri,
-				kind: 'full',
-				items: diagnostics,
+				version: document.version ?? null,
+				items: [...parseDiagnostics, ...semanticDiagnostics],
 			});
 		}
 

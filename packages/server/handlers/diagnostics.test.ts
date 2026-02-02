@@ -2,8 +2,13 @@ import { describe, expect, test, beforeEach } from 'bun:test';
 import { DocumentDiagnosticReportKind } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentManager } from '../document-manager';
-import { createDiagnosticHandler, createDiagnosticsRefreshNotifier } from './diagnostics';
+import {
+	createDiagnosticHandler,
+	createDiagnosticsRefreshNotifier,
+	createWorkspaceDiagnosticHandler,
+} from './diagnostics';
 import type { Connection } from 'vscode-languageserver';
+import { Parser } from '@pls/parser';
 
 function createMockDocument(uri: string, content: string): TextDocument {
 	return {
@@ -198,5 +203,102 @@ describe('Diagnostics Refresh Notifier', () => {
 				resolve(undefined);
 			}, 100);
 		});
+	});
+});
+
+describe('Workspace Diagnostics Handler', () => {
+	const parser = new Parser();
+
+	test('returns WorkspaceDiagnosticReport with proper structure', () => {
+		const documentManager = new DocumentManager();
+		const doc = createMockDocument('file:///test.php', '<?php class Test {}');
+		documentManager.open(doc);
+
+		const ast = parser.parse('<?php class Test {}');
+		const asts = new Map([['file:///test.php', ast]]);
+
+		const handler = createWorkspaceDiagnosticHandler(
+			documentManager,
+			() => [doc],
+			(uri) => asts.get(uri) ?? null,
+			null,
+		);
+
+		const result = handler({ previousResultIds: [] });
+
+		expect(result).toBeDefined();
+		expect(result.items).toBeDefined();
+		expect(Array.isArray(result.items)).toBe(true);
+	});
+
+	test('each document has WorkspaceFullDocumentDiagnosticReport structure', () => {
+		const documentManager = new DocumentManager();
+		const doc = createMockDocument('file:///test.php', '<?php class Test {}');
+		documentManager.open(doc);
+
+		const ast = parser.parse('<?php class Test {}');
+		const asts = new Map([['file:///test.php', ast]]);
+
+		const handler = createWorkspaceDiagnosticHandler(
+			documentManager,
+			() => [doc],
+			(uri) => asts.get(uri) ?? null,
+			null,
+		);
+
+		const result = handler({ previousResultIds: [] });
+
+		expect(result.items.length).toBe(1);
+		const item = result.items[0];
+		expect(item?.kind).toBe(DocumentDiagnosticReportKind.Full);
+		expect(item?.uri).toBe('file:///test.php');
+		expect(item?.version).toBe(1);
+		expect(Array.isArray(item?.items)).toBe(true);
+	});
+
+	test('includes parse errors in diagnostics', () => {
+		const documentManager = new DocumentManager();
+		const doc = createMockDocument('file:///error.php', '<?php class { }');
+		documentManager.open(doc);
+
+		const handler = createWorkspaceDiagnosticHandler(
+			documentManager,
+			() => [doc],
+			() => null, // AST is null for parse errors
+			null,
+		);
+
+		const result = handler({ previousResultIds: [] });
+
+		expect(result.items.length).toBe(1);
+		const item = result.items[0];
+		expect(item?.items.length).toBeGreaterThan(0);
+	});
+
+	test('handles multiple documents', () => {
+		const documentManager = new DocumentManager();
+		const doc1 = createMockDocument('file:///a.php', '<?php class A {}');
+		const doc2 = createMockDocument('file:///b.php', '<?php class B {}');
+		documentManager.open(doc1);
+		documentManager.open(doc2);
+
+		const ast1 = parser.parse('<?php class A {}');
+		const ast2 = parser.parse('<?php class B {}');
+		const asts = new Map([
+			['file:///a.php', ast1],
+			['file:///b.php', ast2],
+		]);
+
+		const handler = createWorkspaceDiagnosticHandler(
+			documentManager,
+			() => [doc1, doc2],
+			(uri) => asts.get(uri) ?? null,
+			null,
+		);
+
+		const result = handler({ previousResultIds: [] });
+
+		expect(result.items.length).toBe(2);
+		expect(result.items.map((i) => i.uri).sort()).toEqual(['file:///a.php', 'file:///b.php']);
 	});
 });
