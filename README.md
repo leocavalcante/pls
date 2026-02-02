@@ -20,84 +20,65 @@ When you use [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/co
 
 **Of course, humans can use it too!** PLS works great with VS Code and Neovim for traditional PHP development.
 
-## ✨ Features
+## ✨ Why PLS is Awesome
 
-| Feature | Description |
-|---------|-------------|
-| **Go to Definition** | Jump to function, class, method, or variable definitions |
-| **Find References** | Locate all usages across your workspace |
-| **Hover Information** | View type info and documentation on hover |
-| **Code Completion** | Context-aware suggestions with trigger characters |
-| **Signature Help** | Parameter hints while typing function calls |
-| **Document Symbols** | Outline view of classes, functions, and more |
-| **Workspace Symbols** | Search symbols across the entire project |
-| **Rename Symbol** | Safe refactoring with prepare/rename support |
-| **Code Actions** | Quick fixes and refactoring suggestions |
-| **Diagnostics** | Parse errors and warnings |
-| **Workspace Diagnostics** | Project-wide diagnostics with inter-file dependency tracking |
-| **Semantic Analysis** | Detect undefined classes, functions, methods, unused imports, and missing parameters |
-| **Linter** | Built-in code quality checks |
-| **Formatter** | Opinionated PHP code formatter |
-| **Type Hierarchy** | Explore class inheritance trees |
-| **Call Hierarchy** | Trace incoming and outgoing calls |
-| **Document Highlights** | Highlight occurrences of a symbol |
-| **Semantic Tokens** | Rich syntax highlighting |
-| **Inlay Hints** | Inline parameter and type hints |
-| **Folding Ranges** | Collapse code blocks |
-| **Document Links** | Clickable paths in require/include |
-| **Formatting** | Code formatting (document and range) |
-| **File Operations** | Auto-update namespaces, classes, and imports on file rename/move |
+### ⚡ Blazing Fast
 
-## 🎨 Formatter
+- **Zero external dependencies** - No PHP binary required
+- **Custom parser** - Hand-written recursive descent parser optimized for speed
+- **Incremental parsing** - Only re-parses changed sections
+- **Parallel indexing** - Multi-threaded workspace scanning
+- **Instant startup** - Single binary, no dependency resolution
 
-PLS includes a built-in opinionated PHP formatter. It handles:
+### 🎯 Intelligent Features
 
-- **Operator spacing**: Consistent spaces around `=`, `===`, `.=`, `->`, `::`, etc.
-- **Brace style**: K&R style with space before opening brace
-- **Indentation**: Configurable tabs or spaces
-- **Method chaining**: Proper indentation for fluent interfaces
-- **Heredocs**: Preserved exactly as written
-- **String literals**: Content never modified
+**Navigation & Understanding:**
+- Go to Definition - Jump to any symbol instantly
+- Find References - Locate all usages across the project
+- Type Hierarchy - Explore class inheritance trees
+- Call Hierarchy - Trace incoming and outgoing calls
+- Document Highlights - See all occurrences of a symbol
 
-The formatter respects your editor's settings for tab size and spaces vs tabs.
+**Coding Assistance:**
+- Code Completion - Context-aware suggestions with auto-import
+- Signature Help - Parameter hints while typing
+- Hover Information - Type info and PHPDoc on hover
+- Inlay Hints - Inline parameter names and return types
 
-## 📁 File Operations
+**Code Quality:**
+- Diagnostics - Parse errors and semantic analysis
+- Semantic Checks - Detect undefined classes, functions, methods
+- Unused Import Detection - Keep your code clean
+- Built-in Formatter - Opinionated PHP formatting
 
-PLS automatically handles namespace and class name updates when PHP files are renamed or moved. This feature follows PSR-4 autoloading conventions.
+**Refactoring:**
+- Rename Symbol - Safe refactoring across the project
+- Code Actions - Quick fixes and suggestions
+- File Operations - Auto-update namespaces and imports on rename/move
 
-**What happens when you rename/move a PHP file:**
+### 🔧 Advanced Capabilities
 
-1. **Namespace update** - The namespace declaration is updated to match the new file path
-2. **Class name update** - If the class name matches the old filename, it's renamed to match the new filename
-3. **Import updates** - All `use` statements referencing the renamed class are updated across the workspace
+**PSR-4 File Operations:**
+When you rename or move PHP files, PLS automatically:
+- Updates namespace declarations
+- Renames classes to match filenames
+- Updates all `use` statements across the workspace
 
-**Example:**
+**Semantic Analysis:**
+- Detects undefined classes and functions
+- Finds missing method parameters
+- Identifies unused imports
+- Catches type mismatches
 
-Rename `src/Models/User.php` to `src/Entities/Account.php`:
-
-```php
-// Before
-namespace App\Models;
-class User { }
-
-// After
-namespace App\Entities;
-class Account { }
-```
-
-All files importing `App\Models\User` are automatically updated to `App\Entities\Account`.
-
-**Requirements:**
-- A `composer.json` with PSR-4 autoload configuration at the workspace root
-- Files must be in paths mapped by PSR-4 autoload rules
-
-**Editor support:**
-- **VS Code**: Works automatically with the PLS extension
-- **Neovim**: Works with the built-in plugin; consider [nvim-lsp-file-operations](https://github.com/antosha417/nvim-lsp-file-operations) for enhanced file tree integration
+**Rich Syntax Support:**
+- Full PHP 8.3 support including attributes, union types, match expressions
+- Semantic tokens for accurate syntax highlighting
+- Folding ranges for code organization
+- Document links in require/include statements
 
 ## 📦 Installation
 
-### Download Binary
+### Download Binary (Recommended)
 
 Pre-built binaries are available for:
 - Linux (x64, arm64)
@@ -184,6 +165,53 @@ PLS communicates via stdio using the Language Server Protocol. Configure your ed
 pls --stdio
 ```
 
+## 🎨 Formatter
+
+PLS includes a built-in opinionated PHP formatter. It handles:
+
+- **Operator spacing**: Consistent spaces around `=`, `===`, `.=`, `->`, `::`, etc.
+- **Brace style**: K&R style with space before opening brace
+- **Indentation**: Configurable tabs or spaces
+- **Method chaining**: Proper indentation for fluent interfaces
+- **Heredocs**: Preserved exactly as written
+- **String literals**: Content never modified
+
+The formatter respects your editor's settings for tab size and spaces vs tabs.
+
+## 📁 File Operations
+
+PLS automatically handles namespace and class name updates when PHP files are renamed or moved. This feature follows PSR-4 autoloading conventions.
+
+**What happens when you rename/move a PHP file:**
+
+1. **Namespace update** - The namespace declaration is updated to match the new file path
+2. **Class name update** - If the class name matches the old filename, it's renamed to match the new filename
+3. **Import updates** - All `use` statements referencing the renamed class are updated across the workspace
+
+**Example:**
+
+Rename `src/Models/User.php` to `src/Entities/Account.php`:
+
+```php
+// Before
+namespace App\Models;
+class User { }
+
+// After
+namespace App\Entities;
+class Account { }
+```
+
+All files importing `App\Models\User` are automatically updated to `App\Entities\Account`.
+
+**Requirements:**
+- A `composer.json` with PSR-4 autoload configuration at the workspace root
+- Files must be in paths mapped by PSR-4 autoload rules
+
+**Editor support:**
+- **VS Code**: Works automatically with the PLS extension
+- **Neovim**: Works with the built-in plugin; consider [nvim-lsp-file-operations](https://github.com/antosha417/nvim-lsp-file-operations) for enhanced file tree integration
+
 ## 🏗️ Architecture
 
 ```
@@ -210,6 +238,8 @@ packages/
 - **Parser**: Recursive descent with precedence climbing for expressions
 - **AST**: Discriminated unions with `kind` field for type narrowing
 - **LSP**: Incremental document sync for performance
+- **Indexing**: Dual-index system (definitions + references) for fast lookups
+- **Parser**: Zero external dependencies, custom TypeScript implementation
 
 ## 🧪 Testing
 
@@ -224,7 +254,7 @@ bun test --watch
 bun run test:coverage
 ```
 
-**Current status**: 1054 tests passing with ~93% line coverage.
+**Current status**: 1421 tests passing with 94.15% line coverage (1425 total tests across 81 files).
 
 ## 🛠️ Development
 
@@ -240,6 +270,9 @@ bun run lint
 
 # Auto-fix lint issues
 bun run lint:fix
+
+# Run tests
+bun test
 ```
 
 ## 📚 References
@@ -248,6 +281,19 @@ bun run lint:fix
 - [PHP Language Specification](https://phplang.org/spec/19-grammar.html)
 - [glayzzle/php-parser](https://github.com/glayzzle/php-parser) - JavaScript PHP parser reference
 - [ANTLR PHP Grammar](https://github.com/antlr/grammars-v4/tree/master/php)
+
+## 🤝 Contributing
+
+Contributions are welcome! PLS was built with AI assistance and welcomes contributions from both humans and AI agents.
+
+Key areas for contribution:
+- Additional LSP handlers
+- Parser improvements
+- Performance optimizations
+- Documentation
+- Editor integrations
+
+See `AGENTS.md` for detailed codebase documentation and development guidelines.
 
 ## 📄 License
 
