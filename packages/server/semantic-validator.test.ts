@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { Parser } from '@pls/parser';
+import { DiagnosticSeverity } from 'vscode-languageserver';
 import { DefinitionIndex } from './definition-index';
 import { defaultConfiguration } from './configuration';
 import { ReferenceIndex } from './reference-index';
 import { SemanticValidator } from './semantic-validator';
+import { SemanticDiagnosticCode } from './types';
 
 describe('SemanticValidator', () => {
 	test('instantiates with dependencies', () => {
@@ -36,5 +38,106 @@ describe('SemanticValidator', () => {
 		);
 
 		expect(validator.validateWorkspace()).toEqual(new Map());
+	});
+
+	describe('undefined symbol checks', () => {
+		const parser = new Parser();
+
+		test('reports undefined class for new expression', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), defaultConfiguration);
+			const ast = parser.parse('<?php $obj = new UndefinedClass();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.code).toBe(SemanticDiagnosticCode.UndefinedClass);
+			expect(diagnostics[0]?.severity).toBe(DiagnosticSeverity.Warning);
+			expect(diagnostics[0]?.message).toBe("Undefined class 'UndefinedClass'");
+		});
+
+		test('reports undefined function for call expression', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), defaultConfiguration);
+			const ast = parser.parse('<?php undefinedFunction();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.code).toBe(SemanticDiagnosticCode.UndefinedFunction);
+			expect(diagnostics[0]?.severity).toBe(DiagnosticSeverity.Warning);
+			expect(diagnostics[0]?.message).toBe("Undefined function 'undefinedFunction'");
+		});
+
+		test('does not report built-in class', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), defaultConfiguration);
+			const ast = parser.parse('<?php $obj = new stdClass();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('does not report built-in function', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), defaultConfiguration);
+			const ast = parser.parse('<?php array_map("strval", [1, 2]);');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('does not report class defined in index', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), defaultConfiguration);
+			const ast = parser.parse('<?php class Foo {} $obj = new Foo();');
+			index.indexDocument('file:///test.php', ast);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('respects undefinedClass config toggle', () => {
+			const index = new DefinitionIndex();
+			const config = {
+				...defaultConfiguration,
+				diagnostics: {
+					...defaultConfiguration.diagnostics,
+					semanticChecks: {
+						...defaultConfiguration.diagnostics.semanticChecks,
+						undefinedClass: false,
+					},
+				},
+			};
+			const validator = new SemanticValidator(index, new ReferenceIndex(), config);
+			const ast = parser.parse('<?php $obj = new UndefinedClass();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('respects undefinedFunction config toggle', () => {
+			const index = new DefinitionIndex();
+			const config = {
+				...defaultConfiguration,
+				diagnostics: {
+					...defaultConfiguration.diagnostics,
+					semanticChecks: {
+						...defaultConfiguration.diagnostics.semanticChecks,
+						undefinedFunction: false,
+					},
+				},
+			};
+			const validator = new SemanticValidator(index, new ReferenceIndex(), config);
+			const ast = parser.parse('<?php undefinedFunction();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
 	});
 });
