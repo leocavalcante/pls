@@ -1,4 +1,9 @@
-import type { CompletionItem, CompletionItemKind, CompletionParams } from 'vscode-languageserver';
+import type {
+	CompletionItem,
+	CompletionItemKind,
+	CompletionParams,
+	CompletionResolveParams,
+} from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { PlsConfiguration } from '../configuration';
 import type { DefinitionIndex, IndexedSymbol, SymbolKind } from '../definition-index';
@@ -32,11 +37,21 @@ function symbolMatchesPrefix(symbol: IndexedSymbol, prefix: string): boolean {
 	return symbol.name.toLowerCase().startsWith(prefix);
 }
 
+export interface CompletionItemData {
+	symbolId: string;
+	kind: SymbolKind;
+	container?: string;
+}
+
 function createCompletionItem(symbol: IndexedSymbol): CompletionItem {
 	return {
 		label: createCompletionLabel(symbol),
 		kind: kindMap[symbol.kind],
-		detail: createCompletionDetail(symbol),
+		data: {
+			symbolId: `${symbol.name}:${symbol.kind}`,
+			kind: symbol.kind,
+			container: symbol.container,
+		} satisfies CompletionItemData,
 	};
 }
 
@@ -68,5 +83,63 @@ export function createCompletionHandler(
 		}
 
 		return items;
+	};
+}
+
+function parseCompletionData(data: unknown): CompletionItemData | null {
+	if (!data || typeof data !== 'object') return null;
+	const d = data as Record<string, unknown>;
+	if (typeof d.symbolId !== 'string' || typeof d.kind !== 'string') return null;
+	return {
+		symbolId: d.symbolId,
+		kind: d.kind as SymbolKind,
+		container: d.container as string | undefined,
+	};
+}
+
+function findSymbolInIndex(
+	index: DefinitionIndex,
+	name: string,
+	kind: SymbolKind,
+	container?: string,
+): IndexedSymbol | undefined {
+	for (const symbol of index.getAllSymbols()) {
+		if (symbol.name === name && symbol.kind === kind) {
+			if (!container || symbol.container === container) {
+				return symbol;
+			}
+		}
+	}
+	return undefined;
+}
+
+export function createCompletionResolveHandler(
+	index: DefinitionIndex,
+	getConfig?: (uri: string) => Promise<PlsConfiguration>,
+) {
+	return async (params: CompletionResolveParams): Promise<CompletionItem> => {
+		const item = params.item;
+		const data = parseCompletionData(item.data);
+
+		if (!data) {
+			// No data field, return item as-is
+			return item;
+		}
+
+		// Find symbol in index
+		const [symbolName, symbolKind] = data.symbolId.split(':');
+		const symbol = findSymbolInIndex(index, symbolName, symbolKind as SymbolKind, data.container);
+
+		if (!symbol) {
+			return item;
+		}
+
+		// Resolve expensive fields
+		const resolved: CompletionItem = {
+			...item,
+			detail: createCompletionDetail(symbol),
+		};
+
+		return resolved;
 	};
 }

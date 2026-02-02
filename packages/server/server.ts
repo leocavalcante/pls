@@ -21,7 +21,7 @@ import {
 } from './handlers/call-hierarchy';
 import { createCodeActionHandler } from './handlers/code-actions';
 import { createCodeLensHandler, createCodeLensResolveHandler } from './handlers/code-lens';
-import { createCompletionHandler } from './handlers/completion';
+import { createCompletionHandler, createCompletionResolveHandler } from './handlers/completion';
 import { createDeclarationHandler } from './handlers/declaration';
 import { createDefinitionHandler } from './handlers/definition';
 import {
@@ -112,6 +112,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			referencesProvider: true,
 			completionProvider: {
 				triggerCharacters: ['$', '>', ':'],
+				resolveProvider: true,
 			},
 			signatureHelpProvider: {
 				triggerCharacters: ['(', ','],
@@ -315,6 +316,12 @@ connection.onCompletion(
 		(uri) => documents.get(uri),
 		definitionIndex,
 		(uri) => configurationManager.getConfiguration(uri),
+	),
+);
+
+connection.onCompletionResolve(
+	createCompletionResolveHandler(definitionIndex, (uri) =>
+		configurationManager.getConfiguration(uri),
 	),
 );
 
