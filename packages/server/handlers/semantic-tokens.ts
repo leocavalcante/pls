@@ -16,6 +16,9 @@ import type {
 import {
 	type SemanticTokens,
 	SemanticTokensBuilder,
+	type SemanticTokensDelta,
+	type SemanticTokensDeltaParams,
+	type SemanticTokensEdit,
 	type SemanticTokensParams,
 } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
@@ -56,21 +59,136 @@ export function createSemanticTokensHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	getAst: (uri: string) => Program | null,
 	index: DefinitionIndex,
+	cache?: Map<
+		string,
+		{
+			version: number;
+			resultId: string;
+			data: number[];
+		}
+	>,
 ) {
-	return (params: SemanticTokensParams): SemanticTokens => {
-		const document = getDocument(params.textDocument.uri);
-		const ast = getAst(params.textDocument.uri);
+	const tokenCache =
+		cache ??
+		new Map<
+			string,
+			{
+				version: number;
+				resultId: string;
+				data: number[];
+			}
+		>();
 
+	const buildTokens = (uri: string): { result: SemanticTokens; data: number[] } => {
+		const document = getDocument(uri);
+		const ast = getAst(uri);
 		const builder = new SemanticTokensBuilder();
 
-		if (!document || !ast) {
-			return builder.build();
+		if (!document) {
+			tokenCache.delete(uri);
+			const empty = builder.build();
+			return { result: empty, data: empty.data };
+		}
+
+		if (!ast) {
+			const empty = builder.build();
+			const resultId = document.version.toString();
+			const result: SemanticTokens = { resultId, data: empty.data };
+			tokenCache.set(uri, { version: document.version, resultId, data: empty.data });
+			return { result, data: empty.data };
 		}
 
 		visitProgram(ast, builder);
-
-		return builder.build();
+		const built = builder.build();
+		const resultId = document.version.toString();
+		const result: SemanticTokens = { resultId, data: built.data };
+		tokenCache.set(uri, { version: document.version, resultId, data: built.data });
+		return { result, data: built.data };
 	};
+
+	const buildDelta = (
+		uri: string,
+		previousResultId: string | null | undefined,
+	): SemanticTokens | SemanticTokensDelta => {
+		const document = getDocument(uri);
+		const cached = tokenCache.get(uri);
+
+		const { result, data } = buildTokens(uri);
+
+		if (!document) {
+			return result;
+		}
+
+		if (!cached || !previousResultId || cached.resultId !== previousResultId) {
+			return result;
+		}
+
+		if (cached.version === document.version) {
+			return { resultId: result.resultId, edits: [] };
+		}
+
+		const edits = computeSemanticTokensEdits(cached.data, data);
+		return { resultId: result.resultId, edits };
+	};
+
+	return {
+		onFull: (params: SemanticTokensParams): SemanticTokens =>
+			buildTokens(params.textDocument.uri).result,
+		onDelta: (params: SemanticTokensDeltaParams): SemanticTokens | SemanticTokensDelta =>
+			buildDelta(params.textDocument.uri, params.previousResultId),
+	};
+}
+
+function computeSemanticTokensEdits(original: number[], modified: number[]): SemanticTokensEdit[] {
+	const originalLength = original.length;
+	const modifiedLength = modified.length;
+	let startIndex = 0;
+
+	while (
+		startIndex < modifiedLength &&
+		startIndex < originalLength &&
+		original[startIndex] === modified[startIndex]
+	) {
+		startIndex++;
+	}
+
+	if (startIndex < modifiedLength && startIndex < originalLength) {
+		let originalEndIndex = originalLength - 1;
+		let modifiedEndIndex = modifiedLength - 1;
+
+		while (
+			originalEndIndex >= startIndex &&
+			modifiedEndIndex >= startIndex &&
+			original[originalEndIndex] === modified[modifiedEndIndex]
+		) {
+			originalEndIndex--;
+			modifiedEndIndex--;
+		}
+
+		if (originalEndIndex < startIndex || modifiedEndIndex < startIndex) {
+			originalEndIndex++;
+			modifiedEndIndex++;
+		}
+
+		const deleteCount = originalEndIndex - startIndex + 1;
+		const newData = modified.slice(startIndex, modifiedEndIndex + 1);
+
+		if (newData.length === 1 && newData[0] === original[originalEndIndex]) {
+			return [{ start: startIndex, deleteCount: deleteCount - 1 }];
+		}
+
+		return [{ start: startIndex, deleteCount, data: newData }];
+	}
+
+	if (startIndex < modifiedLength) {
+		return [{ start: startIndex, deleteCount: 0, data: modified.slice(startIndex) }];
+	}
+
+	if (startIndex < originalLength) {
+		return [{ start: startIndex, deleteCount: originalLength - startIndex }];
+	}
+
+	return [];
 }
 
 function visitProgram(program: Program, builder: SemanticTokensBuilder): void {
