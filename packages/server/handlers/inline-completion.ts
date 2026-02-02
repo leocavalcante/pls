@@ -210,10 +210,7 @@ function generateMethodCompletions(
 
 	// 2. Simple body without PHPDoc
 	completions.push({
-		insertText:
-			'\n\t\t// TODO: Implement ' +
-			methodName +
-			'\n\t\tthrow new \\Exception("Not implemented");\n\t',
+		insertText: `\n\t\t// TODO: Implement ${methodName}\n\t\tthrow new \\Exception("Not implemented");\n\t`,
 	});
 }
 
@@ -351,7 +348,7 @@ function getTypeString(typeNode: unknown): string {
 	}
 
 	if (node.kind === 'NullableType') {
-		return '?' + getTypeString((node as { type: unknown }).type);
+		return `?${getTypeString((node as { type: unknown }).type)}`;
 	}
 
 	if (node.kind === 'ArrayType') {
