@@ -274,4 +274,150 @@ $x = new UsedClass();
 			expect(diagnostics[0]?.message).toBe("Unused import 'App\\UnusedClass'");
 		});
 	});
+
+	describe('undefined method detection', () => {
+		const parser = new Parser();
+		const configOnlyUndefinedMethod = {
+			...defaultConfiguration,
+			diagnostics: {
+				...defaultConfiguration.diagnostics,
+				semanticChecks: {
+					...defaultConfiguration.diagnostics.semanticChecks,
+					undefinedClass: false,
+					undefinedFunction: false,
+					unusedImports: false,
+				},
+			},
+		};
+
+		test('reports undefined method on $this call', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUndefinedMethod,
+			);
+			const ast = parser.parse(`<?php
+class Foo {
+    public function bar() {
+        $this->undefinedMethod();
+    }
+}
+`);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.code).toBe(SemanticDiagnosticCode.UndefinedMethod);
+			expect(diagnostics[0]?.severity).toBe(DiagnosticSeverity.Warning);
+			expect(diagnostics[0]?.message).toBe("Undefined method 'undefinedMethod' in class 'Foo'");
+		});
+
+		test('does not report defined method', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUndefinedMethod,
+			);
+			const ast = parser.parse(`<?php
+class Foo {
+    public function bar() {
+        $this->definedMethod();
+    }
+    public function definedMethod() {}
+}
+`);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('does not report method on other object', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUndefinedMethod,
+			);
+			const ast = parser.parse(`<?php
+class Foo {
+    public function bar() {
+        $other->anyMethod();
+    }
+}
+`);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('respects undefinedMethod config toggle', () => {
+			const config = {
+				...defaultConfiguration,
+				diagnostics: {
+					...defaultConfiguration.diagnostics,
+					semanticChecks: {
+						...defaultConfiguration.diagnostics.semanticChecks,
+						undefinedMethod: false,
+					},
+				},
+			};
+			const validator = new SemanticValidator(new DefinitionIndex(), new ReferenceIndex(), config);
+			const ast = parser.parse(`<?php
+class Foo {
+    public function bar() {
+        $this->undefinedMethod();
+    }
+}
+`);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			const undefinedMethodDiags = diagnostics.filter(
+				(d) => d.code === SemanticDiagnosticCode.UndefinedMethod,
+			);
+			expect(undefinedMethodDiags).toEqual([]);
+		});
+
+		test('handles namespaced classes', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUndefinedMethod,
+			);
+			const ast = parser.parse(`<?php
+namespace App;
+class Foo {
+    public function bar() {
+        $this->missingMethod();
+    }
+}
+`);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.message).toBe("Undefined method 'missingMethod' in class 'Foo'");
+		});
+
+		test('checks methods in traits', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUndefinedMethod,
+			);
+			const ast = parser.parse(`<?php
+trait MyTrait {
+    public function bar() {
+        $this->missingTraitMethod();
+    }
+}
+`);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.message).toBe("Undefined method 'missingTraitMethod' in class 'MyTrait'");
+		});
+	});
 });

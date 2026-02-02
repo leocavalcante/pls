@@ -1,12 +1,15 @@
 import type {
 	CallExpression,
+	ClassDeclaration,
 	Expression,
+	MethodCallExpression,
 	NewExpression,
 	Parameter,
 	Program,
 	PropertyDeclaration,
 	Statement,
 	StaticCallExpression,
+	TraitDeclaration,
 	TypeNode,
 	UseItem,
 } from '@pls/parser';
@@ -43,6 +46,9 @@ export class SemanticValidator {
 		}
 		if (this.config.diagnostics.semanticChecks.unusedImports) {
 			diagnostics.push(...this.checkUnusedImports(uri, ast));
+		}
+		if (this.config.diagnostics.semanticChecks.undefinedMethod) {
+			diagnostics.push(...this.checkUndefinedMethods(uri, ast));
 		}
 
 		return diagnostics;
@@ -332,11 +338,207 @@ export class SemanticValidator {
 		}
 	}
 
-	private checkUndefinedMethods(): SemanticDiagnostic[] {
-		void this.definitionIndex;
-		void this.referenceIndex;
-		void this.config;
-		return [];
+	private checkUndefinedMethods(uri: string, ast: Program): SemanticDiagnostic[] {
+		const diagnostics: SemanticDiagnostic[] = [];
+
+		const checkClassBody = (
+			classDecl: ClassDeclaration | TraitDeclaration,
+		): void => {
+			const className = classDecl.name.name;
+			const classMethods = new Set<string>();
+
+			for (const member of classDecl.body.members) {
+				if (member.kind === 'MethodDeclaration') {
+					classMethods.add(member.name.name);
+				}
+			}
+
+			const checkExprForThisCalls = (expr: Expression): void => {
+				if (expr.kind === 'MethodCallExpression') {
+					if (
+						expr.object.kind === 'Variable' &&
+						expr.object.name === 'this' &&
+						expr.property.kind === 'Identifier'
+					) {
+						const methodName = expr.property.name;
+						if (!classMethods.has(methodName)) {
+							if (!this.hasMethodInIndex(className, methodName)) {
+								diagnostics.push({
+									severity: DiagnosticSeverity.Warning,
+									code: SemanticDiagnosticCode.UndefinedMethod,
+									message: `Undefined method '${methodName}' in class '${className}'`,
+									range: this.toRange(expr.property.loc),
+								});
+							}
+						}
+					}
+					checkExprForThisCalls(expr.object);
+					for (const arg of expr.arguments) {
+						checkExprForThisCalls(arg.value);
+					}
+				} else {
+					this.traverseExprForThisCalls(expr, checkExprForThisCalls);
+				}
+			};
+
+			for (const member of classDecl.body.members) {
+				if (member.kind === 'MethodDeclaration' && member.body) {
+					this.traverseStmtForExprs(member.body, checkExprForThisCalls);
+				}
+			}
+		};
+
+		for (const stmt of ast.statements) {
+			if (stmt.kind === 'ClassDeclaration') {
+				checkClassBody(stmt);
+			} else if (stmt.kind === 'TraitDeclaration') {
+				checkClassBody(stmt);
+			} else if (stmt.kind === 'NamespaceStatement' && stmt.body) {
+				for (const innerStmt of stmt.body) {
+					if (innerStmt.kind === 'ClassDeclaration') {
+						checkClassBody(innerStmt);
+					} else if (innerStmt.kind === 'TraitDeclaration') {
+						checkClassBody(innerStmt);
+					}
+				}
+			}
+		}
+
+		void uri;
+		return diagnostics;
+	}
+
+	private hasMethodInIndex(className: string, methodName: string): boolean {
+		const allMethods = this.definitionIndex.findAllDefinitions(methodName);
+		return allMethods.some(
+			(def) => def.kind === 'method' && def.container === className,
+		);
+	}
+
+	private traverseExprForThisCalls(
+		expr: Expression,
+		callback: (e: Expression) => void,
+	): void {
+		switch (expr.kind) {
+			case 'CallExpression':
+				callback(expr.callee);
+				for (const arg of expr.arguments) {
+					callback(arg.value);
+				}
+				break;
+			case 'NewExpression':
+				for (const arg of expr.arguments) {
+					callback(arg.value);
+				}
+				break;
+			case 'StaticCallExpression':
+				for (const arg of expr.arguments) {
+					callback(arg.value);
+				}
+				break;
+			case 'PropertyAccessExpression':
+				callback(expr.object);
+				break;
+			case 'ArrayAccessExpression':
+				callback(expr.array);
+				if (expr.index) callback(expr.index);
+				break;
+			case 'BinaryExpression':
+			case 'NullCoalesceExpression':
+			case 'AssignmentExpression':
+				callback(expr.left);
+				callback(expr.right);
+				break;
+			case 'UnaryExpression':
+			case 'CloneExpression':
+			case 'PrintExpression':
+			case 'CastExpression':
+				callback(expr.argument);
+				break;
+			case 'TernaryExpression':
+				callback(expr.test);
+				if (expr.consequent) callback(expr.consequent);
+				callback(expr.alternate);
+				break;
+			case 'InstanceofExpression':
+				callback(expr.left);
+				break;
+			case 'ParenthesizedExpression':
+				callback(expr.expression);
+				break;
+			case 'ArrayExpression':
+				for (const item of expr.items) {
+					if (item) {
+						if (item.key) callback(item.key);
+						callback(item.value);
+					}
+				}
+				break;
+			case 'ClosureExpression':
+				this.traverseStmtForExprs(expr.body, callback);
+				break;
+			case 'ArrowFunction':
+				callback(expr.body);
+				break;
+		}
+	}
+
+	private traverseStmtForExprs(
+		stmt: Statement,
+		callback: (e: Expression) => void,
+	): void {
+		switch (stmt.kind) {
+			case 'ExpressionStatement':
+				callback(stmt.expression);
+				break;
+			case 'ReturnStatement':
+				if (stmt.argument) callback(stmt.argument);
+				break;
+			case 'BlockStatement':
+				for (const s of stmt.statements) {
+					this.traverseStmtForExprs(s, callback);
+				}
+				break;
+			case 'IfStatement':
+				callback(stmt.test);
+				this.traverseStmtForExprs(stmt.consequent, callback);
+				if (stmt.alternate) this.traverseStmtForExprs(stmt.alternate, callback);
+				break;
+			case 'WhileStatement':
+			case 'DoWhileStatement':
+				callback(stmt.test);
+				this.traverseStmtForExprs(stmt.body, callback);
+				break;
+			case 'ForStatement':
+				for (const e of stmt.init) callback(e);
+				for (const e of stmt.test) callback(e);
+				for (const e of stmt.update) callback(e);
+				this.traverseStmtForExprs(stmt.body, callback);
+				break;
+			case 'ForeachStatement':
+				callback(stmt.source);
+				this.traverseStmtForExprs(stmt.body, callback);
+				break;
+			case 'SwitchStatement':
+				callback(stmt.discriminant);
+				for (const c of stmt.cases) {
+					if (c.test) callback(c.test);
+					for (const s of c.consequent) {
+						this.traverseStmtForExprs(s, callback);
+					}
+				}
+				break;
+			case 'TryStatement':
+				this.traverseStmtForExprs(stmt.block, callback);
+				for (const c of stmt.catches) {
+					this.traverseStmtForExprs(c.body, callback);
+				}
+				if (stmt.finalizer) this.traverseStmtForExprs(stmt.finalizer, callback);
+				break;
+			case 'ThrowStatement':
+				callback(stmt.argument);
+				break;
+		}
 	}
 
 	private checkMissingParameters(): SemanticDiagnostic[] {
