@@ -18,7 +18,7 @@ import type { PlsConfiguration } from './configuration';
 import type { DefinitionIndex } from './definition-index';
 import { isBuiltinClass, isBuiltinFunction } from './php-builtins';
 import type { ReferenceIndex } from './reference-index';
-import { SemanticDiagnosticCode, type SemanticDiagnostic } from './types';
+import { type SemanticDiagnostic, SemanticDiagnosticCode } from './types';
 
 export class SemanticValidator {
 	private definitionIndex: DefinitionIndex;
@@ -131,7 +131,10 @@ export class SemanticValidator {
 			const normalizedName = normalizeTypeName(name);
 			if (isBuiltinFunction(normalizedName)) return;
 			if (this.definitionIndex.findDefinition(name, 'function')) return;
-			if (normalizedName !== name && this.definitionIndex.findDefinition(normalizedName, 'function')) {
+			if (
+				normalizedName !== name &&
+				this.definitionIndex.findDefinition(normalizedName, 'function')
+			) {
 				return;
 			}
 
@@ -344,9 +347,7 @@ export class SemanticValidator {
 	private checkUndefinedMethods(uri: string, ast: Program): SemanticDiagnostic[] {
 		const diagnostics: SemanticDiagnostic[] = [];
 
-		const checkClassBody = (
-			classDecl: ClassDeclaration | TraitDeclaration,
-		): void => {
+		const checkClassBody = (classDecl: ClassDeclaration | TraitDeclaration): void => {
 			const className = classDecl.name.name;
 			const classMethods = new Set<string>();
 
@@ -413,15 +414,10 @@ export class SemanticValidator {
 
 	private hasMethodInIndex(className: string, methodName: string): boolean {
 		const allMethods = this.definitionIndex.findAllDefinitions(methodName);
-		return allMethods.some(
-			(def) => def.kind === 'method' && def.container === className,
-		);
+		return allMethods.some((def) => def.kind === 'method' && def.container === className);
 	}
 
-	private traverseExprForThisCalls(
-		expr: Expression,
-		callback: (e: Expression) => void,
-	): void {
+	private traverseExprForThisCalls(expr: Expression, callback: (e: Expression) => void): void {
 		switch (expr.kind) {
 			case 'CallExpression':
 				callback(expr.callee);
@@ -486,10 +482,7 @@ export class SemanticValidator {
 		}
 	}
 
-	private traverseStmtForExprs(
-		stmt: Statement,
-		callback: (e: Expression) => void,
-	): void {
+	private traverseStmtForExprs(stmt: Statement, callback: (e: Expression) => void): void {
 		switch (stmt.kind) {
 			case 'ExpressionStatement':
 				callback(stmt.expression);
@@ -555,9 +548,7 @@ export class SemanticValidator {
 				const def = this.definitionIndex.findDefinition(functionName, 'function');
 				if (!def || !def.parameters) return;
 
-				const requiredParams = def.parameters.filter(
-					(p) => !p.defaultValue && !p.variadic,
-				).length;
+				const requiredParams = def.parameters.filter((p) => !p.defaultValue && !p.variadic).length;
 				const providedArgs = expr.arguments.length;
 
 				if (providedArgs < requiredParams) {

@@ -9,8 +9,8 @@ import {
 	type WorkspaceDocumentDiagnosticReport,
 } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { DocumentManager } from '../document-manager';
 import { debounce } from '../debounce';
+import type { DocumentManager } from '../document-manager';
 import type { SemanticValidator } from '../semantic-validator';
 
 const createDiagnosticsHash = (diagnostics: Diagnostic[]): string => {
@@ -41,8 +41,7 @@ export class DiagnosticResultCache {
 
 	isUnchanged(uri: string, version: number, previousResultId: string): boolean {
 		return (
-			this.resultIds.get(uri) === previousResultId &&
-			this.documentVersions.get(uri) === version
+			this.resultIds.get(uri) === previousResultId && this.documentVersions.get(uri) === version
 		);
 	}
 
@@ -134,10 +133,7 @@ export function createWorkspaceDiagnosticHandler(
 	};
 }
 
-export function createDiagnosticsRefreshNotifier(
-	connection: Connection,
-	debounceMs: number = 100,
-) {
+export function createDiagnosticsRefreshNotifier(connection: Connection, debounceMs = 100) {
 	const sendRefresh = debounce(() => {
 		connection.sendRequest('workspace/diagnostic/refresh');
 	}, debounceMs);

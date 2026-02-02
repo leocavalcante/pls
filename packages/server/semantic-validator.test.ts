@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Parser } from '@pls/parser';
 import { DiagnosticSeverity } from 'vscode-languageserver';
-import { DefinitionIndex } from './definition-index';
 import { defaultConfiguration } from './configuration';
+import { DefinitionIndex } from './definition-index';
 import { ReferenceIndex } from './reference-index';
 import { SemanticValidator } from './semantic-validator';
 import { SemanticDiagnosticCode } from './types';
@@ -417,7 +417,9 @@ trait MyTrait {
 			const diagnostics = validator.validateDocument('file:///test.php', ast);
 
 			expect(diagnostics).toHaveLength(1);
-			expect(diagnostics[0]?.message).toBe("Undefined method 'missingTraitMethod' in class 'MyTrait'");
+			expect(diagnostics[0]?.message).toBe(
+				"Undefined method 'missingTraitMethod' in class 'MyTrait'",
+			);
 		});
 	});
 

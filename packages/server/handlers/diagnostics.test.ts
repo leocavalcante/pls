@@ -1,15 +1,15 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { Parser } from '@pls/parser';
 import { DocumentDiagnosticReportKind } from 'vscode-languageserver';
+import type { Connection } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentManager } from '../document-manager';
 import {
+	DiagnosticResultCache,
 	createDiagnosticHandler,
 	createDiagnosticsRefreshNotifier,
 	createWorkspaceDiagnosticHandler,
-	DiagnosticResultCache,
 } from './diagnostics';
-import type { Connection } from 'vscode-languageserver';
-import { Parser } from '@pls/parser';
 
 function createMockDocument(uri: string, content: string): TextDocument {
 	return {

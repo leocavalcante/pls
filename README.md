@@ -34,6 +34,8 @@ When you use [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/co
 | **Rename Symbol** | Safe refactoring with prepare/rename support |
 | **Code Actions** | Quick fixes and refactoring suggestions |
 | **Diagnostics** | Parse errors and warnings |
+| **Workspace Diagnostics** | Project-wide diagnostics with inter-file dependency tracking |
+| **Semantic Analysis** | Detect undefined classes, functions, methods, unused imports, and missing parameters |
 | **Linter** | Built-in code quality checks |
 | **Formatter** | Opinionated PHP code formatter |
 | **Type Hierarchy** | Explore class inheritance trees |

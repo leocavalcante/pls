@@ -9,15 +9,9 @@ import {
 	createConnection,
 } from 'vscode-languageserver/node';
 import { type BackgroundIndexer, createBackgroundIndexer } from './background-indexer';
+import { getConfiguration } from './configuration';
 import { DefinitionIndex } from './definition-index';
 import { DocumentManager } from './document-manager';
-import {
-	createDiagnosticHandler,
-	createWorkspaceDiagnosticHandler,
-	DiagnosticResultCache,
-} from './handlers/diagnostics';
-import { SemanticValidator } from './semantic-validator';
-import { getConfiguration } from './configuration';
 import {
 	createCallHierarchyIncomingCallsHandler,
 	createCallHierarchyOutgoingCallsHandler,
@@ -28,6 +22,11 @@ import { createCodeLensHandler, createCodeLensResolveHandler } from './handlers/
 import { createCompletionHandler } from './handlers/completion';
 import { createDeclarationHandler } from './handlers/declaration';
 import { createDefinitionHandler } from './handlers/definition';
+import {
+	DiagnosticResultCache,
+	createDiagnosticHandler,
+	createWorkspaceDiagnosticHandler,
+} from './handlers/diagnostics';
 import { createDocumentHighlightsHandler } from './handlers/document-highlights';
 import { createDocumentLinksHandler } from './handlers/document-links';
 import { createExecuteCommandHandler, getRegisteredCommands } from './handlers/execute-command';
@@ -63,6 +62,7 @@ import { createTypeHierarchyHandler } from './handlers/type-hierarchy';
 import { createWorkspaceSymbolsHandler } from './handlers/workspace-symbols';
 import { parsePsr4Config } from './psr4-resolver';
 import { ReferenceIndex } from './reference-index';
+import { SemanticValidator } from './semantic-validator';
 import { SymbolExtractor } from './symbol-extractor';
 import { getWorkspaceRoot } from './workspace-scanner';
 
@@ -116,10 +116,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 				prepareProvider: true,
 			},
 			codeActionProvider: true,
-		diagnosticProvider: {
-			interFileDependencies: true,
-			workspaceDiagnostics: true,
-		},
+			diagnosticProvider: {
+				interFileDependencies: true,
+				workspaceDiagnostics: true,
+			},
 			typeHierarchyProvider: true,
 			callHierarchyProvider: true,
 			documentHighlightProvider: true,
@@ -143,32 +143,32 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			executeCommandProvider: {
 				commands: getRegisteredCommands(),
 			},
-		workspace: {
-			workspaceFolders: {
-				supported: true,
-				changeNotifications: true,
+			workspace: {
+				workspaceFolders: {
+					supported: true,
+					changeNotifications: true,
+				},
+				fileOperations: {
+					willCreate: {
+						filters: [{ pattern: { glob: '**/*.php' } }],
+					},
+					didCreate: {
+						filters: [{ pattern: { glob: '**/*.php' } }],
+					},
+					willRename: {
+						filters: [{ pattern: { glob: '**/*.php' } }],
+					},
+					didRename: {
+						filters: [{ pattern: { glob: '**/*.php' } }],
+					},
+					willDelete: {
+						filters: [{ pattern: { glob: '**/*.php' } }],
+					},
+					didDelete: {
+						filters: [{ pattern: { glob: '**/*.php' } }],
+					},
+				},
 			},
-			fileOperations: {
-				willCreate: {
-					filters: [{ pattern: { glob: '**/*.php' } }],
-				},
-				didCreate: {
-					filters: [{ pattern: { glob: '**/*.php' } }],
-				},
-				willRename: {
-					filters: [{ pattern: { glob: '**/*.php' } }],
-				},
-				didRename: {
-					filters: [{ pattern: { glob: '**/*.php' } }],
-				},
-				willDelete: {
-					filters: [{ pattern: { glob: '**/*.php' } }],
-				},
-				didDelete: {
-					filters: [{ pattern: { glob: '**/*.php' } }],
-				},
-			},
-		},
 		},
 		serverInfo: {
 			name: 'pls',
@@ -447,9 +447,7 @@ connection.workspace.onDidRenameFiles(
 
 connection.workspace.onWillDeleteFiles(createWillDeleteFilesHandler());
 
-connection.workspace.onDidDeleteFiles(
-	createDidDeleteFilesHandler(definitionIndex, referenceIndex),
-);
+connection.workspace.onDidDeleteFiles(createDidDeleteFilesHandler(definitionIndex, referenceIndex));
 
 documents.listen(connection);
 
