@@ -30,7 +30,18 @@ bun run build
 
 ## Editor Integration
 
-**VS Code**: Install the **PLS - PHP Language Server** extension from the marketplace.
+**VS Code**: Install from the [latest release](https://github.com/leocavalcante/pls/releases/latest):
+
+1. Download `pls-vscode-0.1.0.vsix` from the release assets
+2. Open VS Code and run `Extensions: Install from VSIX...` from the Command Palette
+3. Select the downloaded `.vsix` file
+
+Or install via command line:
+```bash
+code --install-extension pls-vscode-0.1.0.vsix
+```
+
+See [VS Code documentation](https://code.visualstudio.com/docs/configure/extensions/extension-marketplace#_install-from-a-vsix) for more details.
 
 **Neovim** (lazy.nvim):
 ```lua
