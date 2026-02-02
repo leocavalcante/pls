@@ -3,6 +3,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
 	type InitializeParams,
 	type InitializeResult,
+	DidChangeConfigurationNotification,
 	ProposedFeatures,
 	TextDocumentSyncKind,
 	TextDocuments,
@@ -10,6 +11,7 @@ import {
 } from 'vscode-languageserver/node';
 import { type BackgroundIndexer, createBackgroundIndexer } from './background-indexer';
 import { getConfiguration } from './configuration';
+import { ConfigurationManager } from './configuration-manager';
 import { DefinitionIndex } from './definition-index';
 import { DocumentManager } from './document-manager';
 import {
@@ -73,6 +75,7 @@ const symbolExtractor = new SymbolExtractor();
 const definitionIndex = new DefinitionIndex();
 const referenceIndex = new ReferenceIndex();
 const diagnosticResultCache = new DiagnosticResultCache();
+const configurationManager = new ConfigurationManager();
 const semanticValidator = new SemanticValidator(
 	definitionIndex,
 	referenceIndex,
@@ -83,10 +86,12 @@ const parser = new Parser();
 let backgroundIndexer: BackgroundIndexer | null = null;
 let initializeParams: InitializeParams;
 let workspaceFolders: { uri: string; name: string }[] = [];
+let hasConfigurationCapability = false;
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
 	initializeParams = params;
 	workspaceFolders = params.workspaceFolders ?? [];
+	hasConfigurationCapability = !!(params.capabilities.workspace?.configuration);
 	connection.console.log('PHP Language Server initializing...');
 
 	return {
@@ -180,6 +185,17 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 connection.onInitialized(() => {
 	connection.console.log('PHP Language Server initialized');
 
+	if (hasConfigurationCapability) {
+		connection.client.register(DidChangeConfigurationNotification.type, undefined);
+		configurationManager.setFetcher(async (uri) => {
+			const result = await connection.workspace.getConfiguration({
+				scopeUri: uri,
+				section: 'pls',
+			});
+			return result || {};
+		});
+	}
+
 	backgroundIndexer = createBackgroundIndexer(
 		initializeParams,
 		definitionIndex,
@@ -204,6 +220,10 @@ connection.onInitialized(() => {
 			connection.console.log(`Workspace folders changed: ${workspaceFolders.length} folder(s)`);
 		});
 	}
+});
+
+connection.onDidChangeConfiguration(() => {
+	configurationManager.clearCache();
 });
 
 documents.onDidOpen((event) => {
@@ -234,6 +254,7 @@ documents.onDidClose((event) => {
 	documentManager.close(event.document.uri);
 	definitionIndex.clearDocument(event.document.uri);
 	referenceIndex.clearDocument(event.document.uri);
+	configurationManager.removeDocument(event.document.uri);
 	connection.sendDiagnostics({
 		uri: event.document.uri,
 		diagnostics: [],
