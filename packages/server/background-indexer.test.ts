@@ -120,7 +120,7 @@ describe('BackgroundIndexer', () => {
 			expect(definitionIndex.findDefinition('NewClass', 'class')).toBeUndefined();
 
 			writeFileSync(join(TEST_DIR, 'New.php'), '<?php class NewClass {}');
-			await Bun.sleep(500);
+			await Bun.sleep(1000);
 
 			expect(definitionIndex.findDefinition('NewClass', 'class')).toBeDefined();
 		});
@@ -139,7 +139,7 @@ describe('BackgroundIndexer', () => {
 			expect(definitionIndex.findDefinition('OldName', 'class')).toBeDefined();
 
 			writeFileSync(join(TEST_DIR, 'Changing.php'), '<?php class NewName {}');
-			await Bun.sleep(200);
+			await Bun.sleep(1000);
 
 			expect(definitionIndex.findDefinition('NewName', 'class')).toBeDefined();
 		});

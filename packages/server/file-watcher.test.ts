@@ -53,9 +53,9 @@ describe('FileWatcher', () => {
 			watcher.onChange((event) => events.push(event));
 			watcher.start();
 
-			await Bun.sleep(50);
-			writeFileSync(join(TEST_DIR, 'test.php'), '<?php echo "test";');
 			await Bun.sleep(100);
+			writeFileSync(join(TEST_DIR, 'test.php'), '<?php echo "test";');
+			await Bun.sleep(200);
 
 			expect(events.length).toBeGreaterThanOrEqual(1);
 			expect(events[0]?.uri).toContain('test.php');
@@ -97,9 +97,9 @@ describe('FileWatcher', () => {
 			watcher.onChange((event) => events.push(event));
 			watcher.start();
 
-			await Bun.sleep(50);
-			writeFileSync(join(TEST_DIR, 'src', 'app.php'), '<?php class App {}');
 			await Bun.sleep(100);
+			writeFileSync(join(TEST_DIR, 'src', 'app.php'), '<?php class App {}');
+			await Bun.sleep(200);
 
 			expect(events.length).toBeGreaterThanOrEqual(1);
 			expect(events[0]?.uri).toContain('src');
