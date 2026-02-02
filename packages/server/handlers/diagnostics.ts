@@ -1,4 +1,5 @@
 import {
+	type Connection,
 	type Diagnostic,
 	type DocumentDiagnosticParams,
 	type DocumentDiagnosticReport,
@@ -6,6 +7,7 @@ import {
 } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { DocumentManager } from '../document-manager';
+import { debounce } from '../debounce';
 
 export function createDiagnosticHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
@@ -48,3 +50,24 @@ export function createWorkspaceDiagnosticHandler(
 		return { items };
 	};
 }
+
+export function createDiagnosticsRefreshNotifier(
+	connection: Connection,
+	debounceMs: number = 100,
+) {
+	const sendRefresh = debounce(() => {
+		connection.sendRequest('workspace/diagnostic/refresh');
+	}, debounceMs);
+
+	return {
+		notifyRefresh: () => sendRefresh(),
+		cancel: () => sendRefresh.cancel(),
+		flush: () => sendRefresh.flush(),
+	};
+}
+
+export type DiagnosticsRefreshNotifier = {
+	notifyRefresh(): void;
+	cancel(): void;
+	flush(): void;
+};
