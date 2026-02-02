@@ -5,6 +5,13 @@ export interface PlsConfiguration {
 	};
 	diagnostics: {
 		enabled: boolean;
+		semanticChecks: {
+			undefinedClass: boolean;
+			undefinedFunction: boolean;
+			unusedImports: boolean;
+			undefinedMethod: boolean;
+			missingParameters: boolean;
+		};
 	};
 }
 
@@ -15,6 +22,13 @@ export const defaultConfiguration: PlsConfiguration = {
 	},
 	diagnostics: {
 		enabled: true,
+		semanticChecks: {
+			undefinedClass: true,
+			undefinedFunction: true,
+			unusedImports: true,
+			undefinedMethod: true,
+			missingParameters: true,
+		},
 	},
 };
 
@@ -35,6 +49,10 @@ export function updateConfiguration(config: Partial<PlsConfiguration>): void {
 		diagnostics: {
 			...currentConfiguration.diagnostics,
 			...(config.diagnostics || {}),
+			semanticChecks: {
+				...currentConfiguration.diagnostics.semanticChecks,
+				...(config.diagnostics?.semanticChecks || {}),
+			},
 		},
 	};
 }

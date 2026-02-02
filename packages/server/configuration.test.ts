@@ -14,6 +14,11 @@ describe('Configuration', () => {
 		expect(config.formatting.tabSize).toBe(4);
 		expect(config.formatting.insertSpaces).toBe(false);
 		expect(config.diagnostics.enabled).toBe(true);
+		expect(config.diagnostics.semanticChecks.undefinedClass).toBe(true);
+		expect(config.diagnostics.semanticChecks.undefinedFunction).toBe(true);
+		expect(config.diagnostics.semanticChecks.unusedImports).toBe(true);
+		expect(config.diagnostics.semanticChecks.undefinedMethod).toBe(true);
+		expect(config.diagnostics.semanticChecks.missingParameters).toBe(true);
 	});
 
 	test('getConfiguration returns current configuration', () => {
@@ -110,5 +115,70 @@ describe('Configuration', () => {
 		expect(config.formatting.tabSize).toBe(2);
 		expect(config.formatting.insertSpaces).toBe(true);
 		expect(config.diagnostics.enabled).toBe(false);
+	});
+
+	test('updateConfiguration merges semantic checks', () => {
+		resetConfiguration();
+		updateConfiguration({
+			diagnostics: {
+				semanticChecks: {
+					undefinedClass: false,
+					undefinedFunction: false,
+				},
+			},
+		});
+		const config = getConfiguration();
+		expect(config.diagnostics.semanticChecks.undefinedClass).toBe(false);
+		expect(config.diagnostics.semanticChecks.undefinedFunction).toBe(false);
+		expect(config.diagnostics.semanticChecks.unusedImports).toBe(true);
+		expect(config.diagnostics.semanticChecks.undefinedMethod).toBe(true);
+		expect(config.diagnostics.semanticChecks.missingParameters).toBe(true);
+	});
+
+	test('updateConfiguration merges individual semantic checks', () => {
+		resetConfiguration();
+		updateConfiguration({
+			diagnostics: {
+				semanticChecks: {
+					undefinedClass: false,
+				},
+			},
+		});
+		let config = getConfiguration();
+		expect(config.diagnostics.semanticChecks.undefinedClass).toBe(false);
+		expect(config.diagnostics.semanticChecks.undefinedFunction).toBe(true);
+
+		updateConfiguration({
+			diagnostics: {
+				semanticChecks: {
+					unusedImports: false,
+				},
+			},
+		});
+		config = getConfiguration();
+		expect(config.diagnostics.semanticChecks.undefinedClass).toBe(false);
+		expect(config.diagnostics.semanticChecks.unusedImports).toBe(false);
+		expect(config.diagnostics.semanticChecks.undefinedFunction).toBe(true);
+	});
+
+	test('semantic checks are all enabled by default after reset', () => {
+		updateConfiguration({
+			diagnostics: {
+				semanticChecks: {
+					undefinedClass: false,
+					undefinedFunction: false,
+					unusedImports: false,
+					undefinedMethod: false,
+					missingParameters: false,
+				},
+			},
+		});
+		resetConfiguration();
+		const config = getConfiguration();
+		expect(config.diagnostics.semanticChecks.undefinedClass).toBe(true);
+		expect(config.diagnostics.semanticChecks.undefinedFunction).toBe(true);
+		expect(config.diagnostics.semanticChecks.unusedImports).toBe(true);
+		expect(config.diagnostics.semanticChecks.undefinedMethod).toBe(true);
+		expect(config.diagnostics.semanticChecks.missingParameters).toBe(true);
 	});
 });
