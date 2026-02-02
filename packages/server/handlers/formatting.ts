@@ -1,6 +1,7 @@
 import type {
 	DocumentFormattingParams,
 	DocumentRangeFormattingParams,
+	Range,
 	TextEdit,
 } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
@@ -415,6 +416,62 @@ function normalizeBlankLines(input: string): string {
 	}
 
 	return result;
+}
+
+interface RangesFormattingParams {
+	textDocument: { uri: string };
+	ranges: Range[];
+	options: FormattingOptions;
+}
+
+function rangesOverlap(a: Range, b: Range): boolean {
+	return a.start.line <= b.end.line && a.end.line >= b.start.line;
+}
+
+export function createRangesFormattingHandler(
+	getDocument: (uri: string) => TextDocument | undefined,
+) {
+	return (params: RangesFormattingParams): TextEdit[] | null => {
+		const document = getDocument(params.textDocument.uri);
+		if (!document) return null;
+
+		const allEdits: TextEdit[] = [];
+
+		// Sort ranges by position to avoid conflicts
+		const sortedRanges = [...params.ranges].sort((a, b) => {
+			if (a.start.line !== b.start.line) {
+				return a.start.line - b.start.line;
+			}
+			return a.start.character - b.start.character;
+		});
+
+		// Validate ranges don't overlap
+		const validRanges: Range[] = [];
+		for (let i = 0; i < sortedRanges.length; i++) {
+			const current = sortedRanges[i];
+			const prev = validRanges[validRanges.length - 1];
+			if (!prev || !rangesOverlap(prev, current)) {
+				validRanges.push(current);
+			}
+		}
+
+		// Format each range
+		for (const range of validRanges) {
+			const rangeText = document.getText(range);
+			const formatted = formatPhp(rangeText, {
+				tabSize: params.options.tabSize,
+				insertSpaces: params.options.insertSpaces,
+			});
+			if (formatted !== rangeText) {
+				allEdits.push({
+					range,
+					newText: formatted,
+				});
+			}
+		}
+
+		return allEdits;
+	};
 }
 
 export { formatPhp, getIndentDelta, formatLineSpacing };
