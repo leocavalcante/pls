@@ -10,90 +10,90 @@
  */
 export const PHP_BUILTIN_CLASSES = new Set([
 	// Core classes
-	'stdClass',
-	'Exception',
-	'Error',
-	'TypeError',
-	'ValueError',
-	'ArgumentCountError',
-	'RuntimeException',
-	'InvalidArgumentException',
-	'LogicException',
-	'BadMethodCallException',
+	'stdclass',
+	'exception',
+	'error',
+	'typeerror',
+	'valueerror',
+	'argumentcounterror',
+	'runtimeexception',
+	'invalidargumentexception',
+	'logicexception',
+	'badmethodcallexception',
 
 	// DateTime
-	'DateTime',
-	'DateTimeImmutable',
-	'DateTimeZone',
-	'DateInterval',
-	'DatePeriod',
+	'datetime',
+	'datetimeimmutable',
+	'datetimezone',
+	'dateinterval',
+	'dateperiod',
 
 	// PDO
-	'PDO',
-	'PDOStatement',
-	'PDOException',
+	'pdo',
+	'pdostatement',
+	'pdoexception',
 
 	// Array/Collection
-	'ArrayObject',
-	'ArrayIterator',
+	'arrayobject',
+	'arrayiterator',
 
 	// Interfaces
-	'Iterator',
-	'IteratorAggregate',
-	'Traversable',
-	'Countable',
-	'Serializable',
-	'JsonSerializable',
-	'Stringable',
+	'iterator',
+	'iteratoraggregate',
+	'traversable',
+	'countable',
+	'serializable',
+	'jsonserializable',
+	'stringable',
 
 	// Closures and Generators
-	'Closure',
-	'Generator',
+	'closure',
+	'generator',
 
 	// WeakReference (PHP 7.4+)
-	'WeakReference',
-	'WeakMap',
+	'weakreference',
+	'weakmap',
 
 	// SPL File classes
-	'SplFileInfo',
-	'SplFileObject',
-	'SplTempFileObject',
+	'splfileinfo',
+	'splfileobject',
+	'spltempfileobject',
 
 	// SPL Directory classes
-	'DirectoryIterator',
-	'FilesystemIterator',
-	'RecursiveDirectoryIterator',
-	'GlobIterator',
+	'directoryiterator',
+	'filesystemiterator',
+	'recursivedirectoryiterator',
+	'globiterator',
 
 	// SPL Data structures
-	'SplDoublyLinkedList',
-	'SplStack',
-	'SplQueue',
-	'SplHeap',
-	'SplMinHeap',
-	'SplMaxHeap',
-	'SplPriorityQueue',
-	'SplFixedArray',
-	'SplObjectStorage',
+	'spldoublylinkedlist',
+	'splstack',
+	'splqueue',
+	'splheap',
+	'splminheap',
+	'splmaxheap',
+	'splpriorityqueue',
+	'splfixedarray',
+	'splobjectstorage',
 
 	// Reflection
-	'ReflectionClass',
-	'ReflectionMethod',
-	'ReflectionProperty',
-	'ReflectionFunction',
-	'ReflectionParameter',
+	'reflectionclass',
+	'reflectionmethod',
+	'reflectionproperty',
+	'reflectionfunction',
+	'reflectionparameter',
 
 	// DOM
-	'DOMDocument',
-	'DOMElement',
-	'DOMNode',
+	'domdocument',
+	'domelement',
+	'domnode',
 
 	// SimpleXML
-	'SimpleXMLElement',
+	'simplexmlelement',
 
 	// XML
-	'XMLReader',
-	'XMLWriter',
+	'xmlreader',
+	'xmlwriter',
 ]);
 
 /**
