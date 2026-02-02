@@ -23,12 +23,105 @@
 	"contributes": {
 		"configuration": {
 			"type": "object",
-			"title": "PLS",
+			"title": "PLS - PHP Language Server",
 			"properties": {
 				"pls.serverPath": {
 					"type": "string",
 					"default": "",
 					"description": "Path to the PLS executable. Leave empty to use the bundled binary."
+				},
+				"pls.diagnostics.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable diagnostics"
+				},
+				"pls.diagnostics.maxProblems": {
+					"type": "number",
+					"default": 1000,
+					"description": "Maximum number of problems to report per file"
+				},
+				"pls.diagnostics.semanticChecks.undefinedClass": {
+					"type": "boolean",
+					"default": true,
+					"description": "Report undefined class references"
+				},
+				"pls.diagnostics.semanticChecks.undefinedFunction": {
+					"type": "boolean",
+					"default": true,
+					"description": "Report undefined function references"
+				},
+				"pls.diagnostics.semanticChecks.unusedImports": {
+					"type": "boolean",
+					"default": true,
+					"description": "Report unused imports"
+				},
+				"pls.diagnostics.semanticChecks.undefinedMethod": {
+					"type": "boolean",
+					"default": true,
+					"description": "Report undefined method calls"
+				},
+				"pls.diagnostics.semanticChecks.missingParameters": {
+					"type": "boolean",
+					"default": true,
+					"description": "Report missing required parameters in function calls"
+				},
+				"pls.formatting.tabSize": {
+					"type": "number",
+					"default": 4,
+					"description": "Number of spaces per indentation level"
+				},
+				"pls.formatting.insertSpaces": {
+					"type": "boolean",
+					"default": false,
+					"description": "Use spaces instead of tabs"
+				},
+				"pls.indexing.excludePatterns": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": ["**/vendor/**", "**/node_modules/**"],
+					"description": "Glob patterns to exclude from indexing"
+				},
+				"pls.indexing.maxFileSize": {
+					"type": "number",
+					"default": 1048576,
+					"description": "Maximum file size to index (bytes). Default: 1MB"
+				},
+				"pls.indexing.parallel": {
+					"type": "boolean",
+					"default": true,
+					"description": "Use parallel parsing for workspace indexing"
+				},
+				"pls.completion.autoImport": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically add use statements on completion"
+				},
+				"pls.completion.snippets": {
+					"type": "boolean",
+					"default": true,
+					"description": "Include snippets in completion results"
+				},
+				"pls.completion.maxResults": {
+					"type": "number",
+					"default": 100,
+					"description": "Maximum number of completion items"
+				},
+				"pls.inlayHints.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable inlay hints"
+				},
+				"pls.inlayHints.parameterNames": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show parameter name hints"
+				},
+				"pls.inlayHints.returnTypes": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show return type hints from PHPDoc"
 				}
 			}
 		}
