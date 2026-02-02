@@ -3,6 +3,7 @@ import { Parser } from '@pls/parser';
 import type {
 	CompletionItem,
 	CompletionItemKind,
+	CompletionItemTag,
 	CompletionParams,
 	CompletionResolveParams,
 } from 'vscode-languageserver';
@@ -224,6 +225,11 @@ export function createCompletionResolveHandler(
 			...item,
 			detail: createCompletionDetail(symbol),
 		};
+
+		// Add deprecated tag if symbol is marked as deprecated
+		if (symbol.deprecated) {
+			resolved.tags = [1]; // CompletionItemTag.Deprecated = 1
+		}
 
 		return resolved;
 	};

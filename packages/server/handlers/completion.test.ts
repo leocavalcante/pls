@@ -3,9 +3,9 @@ import { Parser } from '@pls/parser';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DefinitionIndex } from '../definition-index';
 import {
+	type CompletionItemData,
 	createCompletionHandler,
 	createCompletionResolveHandler,
-	type CompletionItemData,
 } from './completion';
 
 const parser = new Parser();
