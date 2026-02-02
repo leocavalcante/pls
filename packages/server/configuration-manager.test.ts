@@ -1,6 +1,6 @@
-import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { defaultConfiguration, resetConfiguration } from './configuration';
 import { ConfigurationManager } from './configuration-manager';
-import { resetConfiguration, defaultConfiguration } from './configuration';
 
 describe('ConfigurationManager', () => {
 	let manager: ConfigurationManager;

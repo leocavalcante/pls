@@ -197,10 +197,7 @@ describe('Configuration', () => {
 	test('default configuration has correct indexing settings', () => {
 		resetConfiguration();
 		const config = getConfiguration();
-		expect(config.indexing.excludePatterns).toEqual([
-			'**/vendor/**',
-			'**/node_modules/**',
-		]);
+		expect(config.indexing.excludePatterns).toEqual(['**/vendor/**', '**/node_modules/**']);
 		expect(config.indexing.maxFileSize).toBe(1048576);
 		expect(config.indexing.parallel).toBe(true);
 	});
@@ -272,10 +269,7 @@ describe('Configuration', () => {
 		});
 		const config = getConfiguration();
 		expect(config.indexing.parallel).toBe(false);
-		expect(config.indexing.excludePatterns).toEqual([
-			'**/vendor/**',
-			'**/node_modules/**',
-		]);
+		expect(config.indexing.excludePatterns).toEqual(['**/vendor/**', '**/node_modules/**']);
 		expect(config.indexing.maxFileSize).toBe(1048576);
 	});
 
@@ -361,10 +355,7 @@ describe('Configuration', () => {
 		const config = getConfiguration();
 		expect(config.diagnostics.maxProblems).toBe(1000);
 		expect(config.diagnostics.severity.parseError).toBe(1);
-		expect(config.indexing.excludePatterns).toEqual([
-			'**/vendor/**',
-			'**/node_modules/**',
-		]);
+		expect(config.indexing.excludePatterns).toEqual(['**/vendor/**', '**/node_modules/**']);
 		expect(config.indexing.maxFileSize).toBe(1048576);
 		expect(config.indexing.parallel).toBe(true);
 		expect(config.completion.autoImport).toBe(true);
@@ -388,10 +379,7 @@ describe('Configuration', () => {
 		});
 		const config = getConfiguration();
 		expect(config.indexing.parallel).toBe(false);
-		expect(config.indexing.excludePatterns).toEqual([
-			'**/vendor/**',
-			'**/node_modules/**',
-		]);
+		expect(config.indexing.excludePatterns).toEqual(['**/vendor/**', '**/node_modules/**']);
 		expect(config.completion.maxResults).toBe(50);
 		expect(config.completion.autoImport).toBe(true);
 		expect(config.inlayHints.enabled).toBe(false);
@@ -405,9 +393,6 @@ describe('Configuration', () => {
 
 		resetConfiguration();
 		const config2 = getConfiguration();
-		expect(config2.indexing.excludePatterns).toEqual([
-			'**/vendor/**',
-			'**/node_modules/**',
-		]);
+		expect(config2.indexing.excludePatterns).toEqual(['**/vendor/**', '**/node_modules/**']);
 	});
 });

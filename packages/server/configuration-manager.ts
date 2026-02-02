@@ -1,8 +1,8 @@
 import {
 	type PlsConfiguration,
 	defaultConfiguration,
-	updateConfiguration as updateGlobalConfig,
 	getConfiguration as getGlobalConfig,
+	updateConfiguration as updateGlobalConfig,
 } from './configuration';
 
 export type ConfigurationFetcher = (uri: string) => Promise<Partial<PlsConfiguration>>;
@@ -47,7 +47,9 @@ export class ConfigurationManager {
 		this.documentSettings.delete(uri);
 	}
 
-	private mergeWithDefaults(config: Partial<PlsConfiguration> | null | undefined): PlsConfiguration {
+	private mergeWithDefaults(
+		config: Partial<PlsConfiguration> | null | undefined,
+	): PlsConfiguration {
 		if (!config) {
 			return { ...defaultConfiguration };
 		}
