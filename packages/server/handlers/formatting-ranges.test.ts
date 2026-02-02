@@ -80,7 +80,7 @@ $c=3;`;
 		});
 
 		test('returns empty array when no changes needed', () => {
-			const content = "<?php\n\$a = 1;\n";
+			const content = '<?php\n$a = 1;\n';
 			const doc = createDocument(content);
 			const handler = createRangesFormattingHandler(() => doc);
 			const result = handler({

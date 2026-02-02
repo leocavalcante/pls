@@ -10,8 +10,14 @@ function generatePhpFile(lines: number): string {
 	return content;
 }
 
-function generateRanges(count: number, maxLine: number): Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> {
-	const ranges: Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> = [];
+function generateRanges(
+	count: number,
+	maxLine: number,
+): Array<{ start: { line: number; character: number }; end: { line: number; character: number } }> {
+	const ranges: Array<{
+		start: { line: number; character: number };
+		end: { line: number; character: number };
+	}> = [];
 	for (let i = 0; i < count; i++) {
 		const line = Math.floor((i / count) * maxLine) + 2; // +2 to skip <?php and class declaration
 		ranges.push({
