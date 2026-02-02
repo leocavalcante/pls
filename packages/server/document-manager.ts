@@ -56,6 +56,10 @@ export class DocumentManager {
 		return this.documents.get(uri)?.diagnostics ?? [];
 	}
 
+	isOpen(uri: string): boolean {
+		return this.documents.has(uri);
+	}
+
 	getMetrics(): ParseMetrics[] {
 		return [...this.metrics];
 	}

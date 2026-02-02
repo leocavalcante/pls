@@ -48,6 +48,10 @@ export interface SymbolDefinition {
 	 * Namespace path (e.g., "App\Models" or null for global namespace)
 	 */
 	namespace?: string | null;
+	/**
+	 * Whether the symbol is marked as deprecated
+	 */
+	deprecated?: boolean;
 }
 
 export class DefinitionIndex {
@@ -99,6 +103,11 @@ export class DefinitionIndex {
 			}
 		}
 		this.byUri.delete(uri);
+	}
+
+	clear(): void {
+		this.definitions.clear();
+		this.byUri.clear();
 	}
 
 	findDefinition(name: string, kind?: SymbolKind): SymbolDefinition | undefined {

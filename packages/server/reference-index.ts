@@ -59,6 +59,11 @@ export class ReferenceIndex {
 		this.byUri.delete(uri);
 	}
 
+	clear(): void {
+		this.references.clear();
+		this.byUri.clear();
+	}
+
 	findReferences(name: string): SymbolReference[] {
 		return this.references.get(name) ?? [];
 	}

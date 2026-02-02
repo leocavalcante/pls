@@ -2,18 +2,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Parser } from '@pls/parser';
 import type { Connection } from 'vscode-languageserver';
-import {
-	WorkDoneProgress,
-	type WorkDoneProgressBegin,
-	type WorkDoneProgressEnd,
-	type WorkDoneProgressReport,
-} from 'vscode-languageserver';
 import { DebouncedMap } from './debounce';
 import type { DefinitionIndex, SymbolDefinition, SymbolKind } from './definition-index';
 import { type FileChangeEvent, FileWatcher } from './file-watcher';
 import { IndexCache } from './index-cache';
 import { ParallelParser, type ParallelParserOptions } from './parallel-parser';
 import type { SerializedSymbol } from './parse-worker';
+import type { ProgressManager } from './progress-manager';
 import type { ReferenceIndex } from './reference-index';
 import { getWorkspaceRoot, scanWorkspace } from './workspace-scanner';
 
@@ -27,6 +22,7 @@ export interface BackgroundIndexerOptions {
 	parallel?: boolean | ParallelParserOptions;
 	cache?: boolean;
 	debounceMs?: number;
+	progressManager?: ProgressManager;
 }
 
 export interface IndexingProgress {
@@ -45,6 +41,7 @@ export class BackgroundIndexer {
 	private debouncedChanges: DebouncedMap<string, FileChangeEvent> | null = null;
 	private isIndexing = false;
 	private progressCallback: ProgressCallback | null = null;
+	private progressManager: ProgressManager | null = null;
 	private progressToken: string | null = null;
 
 	private workspacePath: string;
@@ -67,6 +64,7 @@ export class BackgroundIndexer {
 		this.parser = new Parser();
 		this.useCache = options.cache ?? false;
 		this.debounceMs = options.debounceMs ?? 100;
+		this.progressManager = options.progressManager ?? null;
 
 		if (options.parallel === true) {
 			this.parallelOptions = {};
@@ -135,11 +133,26 @@ export class BackgroundIndexer {
 		this.isIndexing = true;
 
 		try {
-			const files = await scanWorkspace(this.workspacePath);
+			const scanToken = this.progressManager
+				? this.progressManager.begin('Scanning workspace', 'Collecting PHP files...', true)
+				: null;
+			const files = await scanWorkspace(this.workspacePath, {
+				onProgress: (message) => {
+					if (!scanToken || !this.progressManager) return;
+					this.progressManager.report(scanToken, undefined, message);
+				},
+			});
+			if (scanToken && this.progressManager) {
+				this.progressManager.end(scanToken, 'Workspace scan complete');
+			}
+			if (scanToken && this.progressManager?.isCancelled(scanToken)) {
+				this.log('Workspace scan cancelled');
+				return;
+			}
 			const total = files.length;
 
 			this.log(`Indexing ${total} PHP files...`);
-			await this.startLspProgress('Indexing PHP files');
+			this.startLspProgress('Indexing PHP files');
 			this.reportProgress({ total, indexed: 0 });
 
 			if (this.parallelParser) {
@@ -150,8 +163,10 @@ export class BackgroundIndexer {
 
 			this.log(`Indexing complete: ${total} files`);
 			this.reportProgress({ total, indexed: total });
-			this.endLspProgress();
 		} finally {
+			if (this.progressToken) {
+				this.endLspProgress();
+			}
 			this.isIndexing = false;
 		}
 	}
@@ -160,6 +175,10 @@ export class BackgroundIndexer {
 		let cachedCount = 0;
 
 		for (let i = 0; i < files.length; i += this.batchSize) {
+			if (this.progressToken && this.progressManager?.isCancelled(this.progressToken)) {
+				this.log('Indexing cancelled');
+				break;
+			}
 			const batch = files.slice(i, i + this.batchSize);
 
 			for (const uri of batch) {
@@ -189,6 +208,10 @@ export class BackgroundIndexer {
 		let indexed = 0;
 
 		for (let i = 0; i < files.length; i += this.batchSize) {
+			if (this.progressToken && this.progressManager?.isCancelled(this.progressToken)) {
+				this.log('Indexing cancelled');
+				break;
+			}
 			const batch = files.slice(i, i + this.batchSize);
 			const results = await this.parallelParser.parseFiles(batch);
 
@@ -301,50 +324,19 @@ export class BackgroundIndexer {
 		}
 	}
 
-	private async startLspProgress(title: string): Promise<void> {
-		if (!this.connection) return;
-
-		this.progressToken = `pls-indexing-${Date.now()}`;
-
-		try {
-			await this.connection.sendRequest('window/workDoneProgress/create', {
-				token: this.progressToken,
-			});
-
-			const begin: WorkDoneProgressBegin = {
-				kind: 'begin',
-				title,
-				cancellable: false,
-				percentage: 0,
-			};
-
-			this.connection.sendProgress(WorkDoneProgress.type, this.progressToken, begin);
-		} catch {
-			this.progressToken = null;
-		}
+	private startLspProgress(title: string): void {
+		if (!this.progressManager) return;
+		this.progressToken = this.progressManager.begin(title, 'Preparing...', true);
 	}
 
 	private reportLspProgress(message: string, percentage: number): void {
-		if (!this.connection || !this.progressToken) return;
-
-		const report: WorkDoneProgressReport = {
-			kind: 'report',
-			message,
-			percentage,
-		};
-
-		this.connection.sendProgress(WorkDoneProgress.type, this.progressToken, report);
+		if (!this.progressManager || !this.progressToken) return;
+		this.progressManager.report(this.progressToken, percentage, message);
 	}
 
 	private endLspProgress(): void {
-		if (!this.connection || !this.progressToken) return;
-
-		const end: WorkDoneProgressEnd = {
-			kind: 'end',
-			message: 'Indexing complete',
-		};
-
-		this.connection.sendProgress(WorkDoneProgress.type, this.progressToken, end);
+		if (!this.progressManager || !this.progressToken) return;
+		this.progressManager.end(this.progressToken, 'Indexing complete');
 		this.progressToken = null;
 	}
 }
@@ -354,6 +346,7 @@ export function createBackgroundIndexer(
 	definitionIndex: DefinitionIndex,
 	referenceIndex: ReferenceIndex,
 	connection?: Connection,
+	progressManager?: ProgressManager,
 ): BackgroundIndexer | null {
 	const workspacePath = getWorkspaceRoot(initParams);
 	if (!workspacePath) {
@@ -365,5 +358,6 @@ export function createBackgroundIndexer(
 		definitionIndex,
 		referenceIndex,
 		connection,
+		progressManager: progressManager ?? null,
 	});
 }
