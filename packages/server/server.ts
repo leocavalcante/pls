@@ -41,7 +41,11 @@ import {
 	createWillRenameFilesHandler,
 } from './handlers/file-operations';
 import { createFoldingRangeHandler } from './handlers/folding-range';
-import { createFormattingHandler, createRangeFormattingHandler } from './handlers/formatting';
+import {
+	createFormattingHandler,
+	createRangeFormattingHandler,
+	createRangesFormattingHandler,
+} from './handlers/formatting';
 import { createHoverHandler } from './handlers/hover';
 import { createImplementationHandler } from './handlers/implementation';
 import { createInlayHintsHandler } from './handlers/inlay-hints';
@@ -327,6 +331,8 @@ connection.onWorkspaceSymbol(createWorkspaceSymbolsHandler(definitionIndex));
 connection.onDocumentFormatting(createFormattingHandler((uri) => documents.get(uri)));
 
 connection.onDocumentRangeFormatting(createRangeFormattingHandler((uri) => documents.get(uri)));
+
+connection.onDocumentRangesFormatting(createRangesFormattingHandler((uri) => documents.get(uri)));
 
 connection.onDocumentOnTypeFormatting(createOnTypeFormattingHandler((uri) => documents.get(uri)));
 
