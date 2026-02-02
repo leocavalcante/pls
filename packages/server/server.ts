@@ -302,7 +302,13 @@ connection.onReferences(
 	),
 );
 
-connection.onCompletion(createCompletionHandler((uri) => documents.get(uri), definitionIndex));
+connection.onCompletion(
+	createCompletionHandler(
+		(uri) => documents.get(uri),
+		definitionIndex,
+		(uri) => configurationManager.getConfiguration(uri),
+	),
+);
 
 connection.onSignatureHelp(
 	createSignatureHelpHandler(
@@ -396,6 +402,7 @@ connection.languages.inlayHint.on(
 		(uri) => documents.get(uri),
 		(uri) => documentManager.getAst(uri),
 		definitionIndex,
+		(uri) => configurationManager.getConfiguration(uri),
 	),
 );
 

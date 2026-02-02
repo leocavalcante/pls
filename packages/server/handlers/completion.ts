@@ -1,5 +1,6 @@
 import type { CompletionItem, CompletionItemKind, CompletionParams } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
+import type { PlsConfiguration } from '../configuration';
 import type { DefinitionIndex, IndexedSymbol, SymbolKind } from '../definition-index';
 import { getWordAtPosition } from '../position-utils';
 
@@ -42,10 +43,14 @@ function createCompletionItem(symbol: IndexedSymbol): CompletionItem {
 export function createCompletionHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	index: DefinitionIndex,
+	getConfig?: (uri: string) => Promise<PlsConfiguration>,
 ) {
-	return (params: CompletionParams): CompletionItem[] => {
+	return async (params: CompletionParams): Promise<CompletionItem[]> => {
 		const document = getDocument(params.textDocument.uri);
 		if (!document) return [];
+
+		const config = getConfig ? await getConfig(params.textDocument.uri) : null;
+		const maxResults = config?.completion?.maxResults ?? 100;
 
 		const word = getWordAtPosition(document.getText(), params.position) ?? '';
 		const prefix = extractPrefix(word);
@@ -54,6 +59,7 @@ export function createCompletionHandler(
 		const seen = new Set<string>();
 
 		for (const symbol of index.getAllSymbols()) {
+			if (items.length >= maxResults) break;
 			if (!symbolMatchesPrefix(symbol, prefix)) continue;
 			if (seen.has(symbol.name)) continue;
 

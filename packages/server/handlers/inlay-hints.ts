@@ -12,14 +12,33 @@ import type {
 import type { InlayHint, InlayHintParams, Position, Range } from 'vscode-languageserver';
 import { InlayHintKind } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
+import type { PlsConfiguration } from '../configuration';
 import type { DefinitionIndex } from '../definition-index';
+
+interface InlayHintsConfig {
+	enabled: boolean;
+	parameterNames: boolean;
+	returnTypes: boolean;
+}
 
 export function createInlayHintsHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	getAst: (uri: string) => Program | null,
 	index: DefinitionIndex,
+	getConfig?: (uri: string) => Promise<PlsConfiguration>,
 ) {
-	return (params: InlayHintParams): InlayHint[] => {
+	return async (params: InlayHintParams): Promise<InlayHint[]> => {
+		const config = getConfig ? await getConfig(params.textDocument.uri) : null;
+		const hintsConfig: InlayHintsConfig = {
+			enabled: config?.inlayHints?.enabled ?? true,
+			parameterNames: config?.inlayHints?.parameterNames ?? true,
+			returnTypes: config?.inlayHints?.returnTypes ?? true,
+		};
+
+		if (!hintsConfig.enabled) {
+			return [];
+		}
+
 		const document = getDocument(params.textDocument.uri);
 		const ast = getAst(params.textDocument.uri);
 		if (!document || !ast) return [];
@@ -27,7 +46,7 @@ export function createInlayHintsHandler(
 		const hints: InlayHint[] = [];
 		const range = params.range;
 
-		collectHintsFromStatements(ast.statements, range, hints, index);
+		collectHintsFromStatements(ast.statements, range, hints, index, hintsConfig);
 
 		return hints;
 	};
@@ -38,9 +57,10 @@ function collectHintsFromStatements(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
 	for (const statement of statements) {
-		collectHintsFromStatement(statement, range, hints, index);
+		collectHintsFromStatement(statement, range, hints, index, config);
 	}
 }
 
@@ -49,43 +69,44 @@ function collectHintsFromStatement(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
 	if (!isInRange(statement.loc, range)) return;
 
 	switch (statement.kind) {
 		case 'ExpressionStatement':
-			collectHintsFromExpression(statement.expression, range, hints, index);
+			collectHintsFromExpression(statement.expression, range, hints, index, config);
 			break;
 		case 'ReturnStatement':
-			handleReturnStatement(statement, range, hints, index);
+			handleReturnStatement(statement, range, hints, index, config);
 			break;
 		case 'IfStatement':
-			handleIfStatement(statement, range, hints, index);
+			handleIfStatement(statement, range, hints, index, config);
 			break;
 		case 'WhileStatement':
 		case 'DoWhileStatement':
-			handleLoopStatement(statement, range, hints, index);
+			handleLoopStatement(statement, range, hints, index, config);
 			break;
 		case 'ForStatement':
-			handleForStatement(statement, range, hints, index);
+			handleForStatement(statement, range, hints, index, config);
 			break;
 		case 'ForeachStatement':
-			handleForeachStatement(statement, range, hints, index);
+			handleForeachStatement(statement, range, hints, index, config);
 			break;
 		case 'BlockStatement':
-			collectHintsFromStatements(statement.statements, range, hints, index);
+			collectHintsFromStatements(statement.statements, range, hints, index, config);
 			break;
 		case 'FunctionDeclaration':
-			handleFunctionDeclaration(statement, range, hints, index);
+			handleFunctionDeclaration(statement, range, hints, index, config);
 			break;
 		case 'ClassDeclaration':
-			collectHintsFromClass(statement, range, hints, index);
+			collectHintsFromClass(statement, range, hints, index, config);
 			break;
 		case 'TryStatement':
-			handleTryStatement(statement, range, hints, index);
+			handleTryStatement(statement, range, hints, index, config);
 			break;
 		case 'ThrowStatement':
-			collectHintsFromExpression(statement.argument, range, hints, index);
+			collectHintsFromExpression(statement.argument, range, hints, index, config);
 			break;
 	}
 }
@@ -95,9 +116,10 @@ function handleReturnStatement(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
 	if (!statement.argument) return;
-	collectHintsFromExpression(statement.argument, range, hints, index);
+	collectHintsFromExpression(statement.argument, range, hints, index, config);
 }
 
 function handleIfStatement(
@@ -105,11 +127,12 @@ function handleIfStatement(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(statement.test, range, hints, index);
-	collectHintsFromStatement(statement.consequent, range, hints, index);
+	collectHintsFromExpression(statement.test, range, hints, index, config);
+	collectHintsFromStatement(statement.consequent, range, hints, index, config);
 	if (statement.alternate) {
-		collectHintsFromStatement(statement.alternate, range, hints, index);
+		collectHintsFromStatement(statement.alternate, range, hints, index, config);
 	}
 }
 
@@ -118,9 +141,10 @@ function handleLoopStatement(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(statement.test, range, hints, index);
-	collectHintsFromStatement(statement.body, range, hints, index);
+	collectHintsFromExpression(statement.test, range, hints, index, config);
+	collectHintsFromStatement(statement.body, range, hints, index, config);
 }
 
 function handleForStatement(
@@ -128,17 +152,18 @@ function handleForStatement(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
 	for (const init of statement.init) {
-		collectHintsFromExpression(init, range, hints, index);
+		collectHintsFromExpression(init, range, hints, index, config);
 	}
 	for (const test of statement.test) {
-		collectHintsFromExpression(test, range, hints, index);
+		collectHintsFromExpression(test, range, hints, index, config);
 	}
 	for (const update of statement.update) {
-		collectHintsFromExpression(update, range, hints, index);
+		collectHintsFromExpression(update, range, hints, index, config);
 	}
-	collectHintsFromStatement(statement.body, range, hints, index);
+	collectHintsFromStatement(statement.body, range, hints, index, config);
 }
 
 function handleForeachStatement(
@@ -146,13 +171,14 @@ function handleForeachStatement(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(statement.source, range, hints, index);
+	collectHintsFromExpression(statement.source, range, hints, index, config);
 	if (statement.key) {
-		collectHintsFromExpression(statement.key, range, hints, index);
+		collectHintsFromExpression(statement.key, range, hints, index, config);
 	}
-	collectHintsFromExpression(statement.value, range, hints, index);
-	collectHintsFromStatement(statement.body, range, hints, index);
+	collectHintsFromExpression(statement.value, range, hints, index, config);
+	collectHintsFromStatement(statement.body, range, hints, index, config);
 }
 
 function handleFunctionDeclaration(
@@ -160,10 +186,13 @@ function handleFunctionDeclaration(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	addReturnTypeHint(statement, range, hints);
+	if (config.returnTypes) {
+		addReturnTypeHint(statement, range, hints);
+	}
 	if (statement.body) {
-		collectHintsFromStatement(statement.body, range, hints, index);
+		collectHintsFromStatement(statement.body, range, hints, index, config);
 	}
 }
 
@@ -172,13 +201,14 @@ function handleTryStatement(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromStatement(statement.block, range, hints, index);
+	collectHintsFromStatement(statement.block, range, hints, index, config);
 	for (const catchClause of statement.catches) {
-		collectHintsFromStatement(catchClause.body, range, hints, index);
+		collectHintsFromStatement(catchClause.body, range, hints, index, config);
 	}
 	if (statement.finalizer) {
-		collectHintsFromStatement(statement.finalizer, range, hints, index);
+		collectHintsFromStatement(statement.finalizer, range, hints, index, config);
 	}
 }
 
@@ -187,14 +217,17 @@ function collectHintsFromClass(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
 	for (const member of classDecl.body.members) {
 		if (!isInRange(member.loc, range)) continue;
 
 		if (member.kind === 'MethodDeclaration') {
-			addReturnTypeHintForMethod(member, range, hints);
+			if (config.returnTypes) {
+				addReturnTypeHintForMethod(member, range, hints);
+			}
 			if (member.body) {
-				collectHintsFromStatement(member.body, range, hints, index);
+				collectHintsFromStatement(member.body, range, hints, index, config);
 			}
 		}
 	}
@@ -205,42 +238,43 @@ function collectHintsFromExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
 	if (!isInRange(expression.loc, range)) return;
 
 	switch (expression.kind) {
 		case 'CallExpression':
-			handleCallExpression(expression, range, hints, index);
+			handleCallExpression(expression, range, hints, index, config);
 			break;
 		case 'MethodCallExpression':
-			handleMethodCallExpression(expression, range, hints, index);
+			handleMethodCallExpression(expression, range, hints, index, config);
 			break;
 		case 'NewExpression':
-			handleNewExpression(expression, range, hints, index);
+			handleNewExpression(expression, range, hints, index, config);
 			break;
 		case 'BinaryExpression':
-			handleBinaryExpression(expression, range, hints, index);
+			handleBinaryExpression(expression, range, hints, index, config);
 			break;
 		case 'UnaryExpression':
-			collectHintsFromExpression(expression.argument, range, hints, index);
+			collectHintsFromExpression(expression.argument, range, hints, index, config);
 			break;
 		case 'AssignmentExpression':
-			handleAssignmentExpression(expression, range, hints, index);
+			handleAssignmentExpression(expression, range, hints, index, config);
 			break;
 		case 'TernaryExpression':
-			handleTernaryExpression(expression, range, hints, index);
+			handleTernaryExpression(expression, range, hints, index, config);
 			break;
 		case 'ArrayExpression':
-			handleArrayExpression(expression, range, hints, index);
+			handleArrayExpression(expression, range, hints, index, config);
 			break;
 		case 'PropertyAccessExpression':
-			handlePropertyAccessExpression(expression, range, hints, index);
+			handlePropertyAccessExpression(expression, range, hints, index, config);
 			break;
 		case 'ArrayAccessExpression':
-			handleArrayAccessExpression(expression, range, hints, index);
+			handleArrayAccessExpression(expression, range, hints, index, config);
 			break;
 		case 'ParenthesizedExpression':
-			collectHintsFromExpression(expression.expression, range, hints, index);
+			collectHintsFromExpression(expression.expression, range, hints, index, config);
 			break;
 	}
 }
@@ -250,11 +284,14 @@ function handleCallExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	addParameterHints(expression, hints, index, false);
-	collectHintsFromExpression(expression.callee, range, hints, index);
+	if (config.parameterNames) {
+		addParameterHints(expression, hints, index, false);
+	}
+	collectHintsFromExpression(expression.callee, range, hints, index, config);
 	for (const arg of expression.arguments) {
-		collectHintsFromExpression(arg.value, range, hints, index);
+		collectHintsFromExpression(arg.value, range, hints, index, config);
 	}
 }
 
@@ -263,12 +300,15 @@ function handleMethodCallExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	addParameterHintsForMethod(expression, hints, index);
-	collectHintsFromExpression(expression.object, range, hints, index);
-	collectHintsFromExpression(expression.property, range, hints, index);
+	if (config.parameterNames) {
+		addParameterHintsForMethod(expression, hints, index);
+	}
+	collectHintsFromExpression(expression.object, range, hints, index, config);
+	collectHintsFromExpression(expression.property, range, hints, index, config);
 	for (const arg of expression.arguments) {
-		collectHintsFromExpression(arg.value, range, hints, index);
+		collectHintsFromExpression(arg.value, range, hints, index, config);
 	}
 }
 
@@ -277,10 +317,11 @@ function handleNewExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(expression.class, range, hints, index);
+	collectHintsFromExpression(expression.class, range, hints, index, config);
 	for (const arg of expression.arguments) {
-		collectHintsFromExpression(arg.value, range, hints, index);
+		collectHintsFromExpression(arg.value, range, hints, index, config);
 	}
 }
 
@@ -289,9 +330,10 @@ function handleBinaryExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(expression.left, range, hints, index);
-	collectHintsFromExpression(expression.right, range, hints, index);
+	collectHintsFromExpression(expression.left, range, hints, index, config);
+	collectHintsFromExpression(expression.right, range, hints, index, config);
 }
 
 function handleAssignmentExpression(
@@ -299,9 +341,10 @@ function handleAssignmentExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(expression.left, range, hints, index);
-	collectHintsFromExpression(expression.right, range, hints, index);
+	collectHintsFromExpression(expression.left, range, hints, index, config);
+	collectHintsFromExpression(expression.right, range, hints, index, config);
 }
 
 function handleTernaryExpression(
@@ -309,12 +352,13 @@ function handleTernaryExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(expression.test, range, hints, index);
+	collectHintsFromExpression(expression.test, range, hints, index, config);
 	if (expression.consequent) {
-		collectHintsFromExpression(expression.consequent, range, hints, index);
+		collectHintsFromExpression(expression.consequent, range, hints, index, config);
 	}
-	collectHintsFromExpression(expression.alternate, range, hints, index);
+	collectHintsFromExpression(expression.alternate, range, hints, index, config);
 }
 
 function handleArrayExpression(
@@ -322,12 +366,13 @@ function handleArrayExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
 	for (const item of expression.items) {
 		if (item.key) {
-			collectHintsFromExpression(item.key, range, hints, index);
+			collectHintsFromExpression(item.key, range, hints, index, config);
 		}
-		collectHintsFromExpression(item.value, range, hints, index);
+		collectHintsFromExpression(item.value, range, hints, index, config);
 	}
 }
 
@@ -336,9 +381,10 @@ function handlePropertyAccessExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(expression.object, range, hints, index);
-	collectHintsFromExpression(expression.property, range, hints, index);
+	collectHintsFromExpression(expression.object, range, hints, index, config);
+	collectHintsFromExpression(expression.property, range, hints, index, config);
 }
 
 function handleArrayAccessExpression(
@@ -346,10 +392,11 @@ function handleArrayAccessExpression(
 	range: Range,
 	hints: InlayHint[],
 	index: DefinitionIndex,
+	config: InlayHintsConfig,
 ): void {
-	collectHintsFromExpression(expression.array, range, hints, index);
+	collectHintsFromExpression(expression.array, range, hints, index, config);
 	if (expression.index) {
-		collectHintsFromExpression(expression.index, range, hints, index);
+		collectHintsFromExpression(expression.index, range, hints, index, config);
 	}
 }
 

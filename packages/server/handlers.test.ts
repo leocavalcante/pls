@@ -82,7 +82,7 @@ describe('DefinitionHandler', () => {
 });
 
 describe('CompletionHandler', () => {
-	test('returns completions matching prefix', () => {
+	test('returns completions matching prefix', async () => {
 		const index = new DefinitionIndex();
 		const manager = new DocumentManager();
 		const doc = TextDocument.create(
@@ -97,7 +97,7 @@ describe('CompletionHandler', () => {
 
 		const handler = createCompletionHandler(() => doc, index);
 
-		const result = handler({
+		const result = await handler({
 			textDocument: { uri: 'file:///test.php' },
 			position: { line: 0, character: 47 },
 		});

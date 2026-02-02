@@ -7,7 +7,7 @@ import { createInlayHintsHandler } from './handlers/inlay-hints';
 
 describe('InlayHintsHandler', () => {
 	describe('parameter hints', () => {
-		test('shows parameter hints for multi-argument function call', () => {
+		test('shows parameter hints for multi-argument function call', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -26,7 +26,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -48,7 +48,7 @@ describe('InlayHintsHandler', () => {
 			expect(rateHint?.position.character).toBe(59);
 		});
 
-		test('shows parameter hints for method call', () => {
+		test('shows parameter hints for method call', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -67,7 +67,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -84,7 +84,7 @@ describe('InlayHintsHandler', () => {
 			expect(bHint).toBeDefined();
 		});
 
-		test('no hints for single-argument function call', () => {
+		test('no hints for single-argument function call', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -103,7 +103,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -114,7 +114,7 @@ describe('InlayHintsHandler', () => {
 			expect(result).toEqual([]);
 		});
 
-		test('no hints when argument name matches parameter name', () => {
+		test('no hints when argument name matches parameter name', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -133,7 +133,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -144,7 +144,7 @@ describe('InlayHintsHandler', () => {
 			expect(result).toEqual([]);
 		});
 
-		test('no hints when function definition not found', () => {
+		test('no hints when function definition not found', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -163,7 +163,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -176,7 +176,7 @@ describe('InlayHintsHandler', () => {
 	});
 
 	describe('return type hints', () => {
-		test('shows return type hint from PHPDoc', () => {
+		test('shows return type hint from PHPDoc', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -195,7 +195,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -209,7 +209,7 @@ describe('InlayHintsHandler', () => {
 			expect(returnHint?.kind).toBe(InlayHintKind.Type);
 		});
 
-		test('no return type hint when explicit return type exists', () => {
+		test('no return type hint when explicit return type exists', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -228,7 +228,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -236,11 +236,10 @@ describe('InlayHintsHandler', () => {
 				},
 			});
 
-			// No inlay hint needed since explicit return type already present
 			expect(result).toEqual([]);
 		});
 
-		test('no return type hint without PHPDoc', () => {
+		test('no return type hint without PHPDoc', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -259,7 +258,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -270,7 +269,7 @@ describe('InlayHintsHandler', () => {
 			expect(result).toEqual([]);
 		});
 
-		test('shows return type hint for method from PHPDoc', () => {
+		test('shows return type hint for method from PHPDoc', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -289,7 +288,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -305,7 +304,7 @@ describe('InlayHintsHandler', () => {
 	});
 
 	describe('range filtering', () => {
-		test('only returns hints within requested range', () => {
+		test('only returns hints within requested range', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -324,8 +323,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			// Request hints only for line 2
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 2, character: 0 },
@@ -334,13 +332,13 @@ describe('InlayHintsHandler', () => {
 			});
 
 			expect(result).not.toBeNull();
-			expect(result?.length).toBe(2); // Only hints for test(1, 2)
+			expect(result?.length).toBe(2);
 			expect(result?.every((h) => h.position.line === 2)).toBe(true);
 		});
 	});
 
 	describe('edge cases', () => {
-		test('handles missing document', () => {
+		test('handles missing document', async () => {
 			const index = new DefinitionIndex();
 			const handler = createInlayHintsHandler(
 				() => undefined,
@@ -348,7 +346,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -359,7 +357,7 @@ describe('InlayHintsHandler', () => {
 			expect(result).toEqual([]);
 		});
 
-		test('handles missing AST', () => {
+		test('handles missing AST', async () => {
 			const index = new DefinitionIndex();
 			const doc = TextDocument.create('file:///test.php', 'php', 1, '<?php');
 
@@ -369,7 +367,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
@@ -380,7 +378,7 @@ describe('InlayHintsHandler', () => {
 			expect(result).toEqual([]);
 		});
 
-		test('handles variadic parameters', () => {
+		test('handles variadic parameters', async () => {
 			const index = new DefinitionIndex();
 			const manager = new DocumentManager();
 			const doc = TextDocument.create(
@@ -399,7 +397,7 @@ describe('InlayHintsHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = await handler({
 				textDocument: { uri: 'file:///test.php' },
 				range: {
 					start: { line: 0, character: 0 },
