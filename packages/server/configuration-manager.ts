@@ -47,7 +47,10 @@ export class ConfigurationManager {
 		this.documentSettings.delete(uri);
 	}
 
-	private mergeWithDefaults(config: Partial<PlsConfiguration>): PlsConfiguration {
+	private mergeWithDefaults(config: Partial<PlsConfiguration> | null | undefined): PlsConfiguration {
+		if (!config) {
+			return { ...defaultConfiguration };
+		}
 		return {
 			formatting: {
 				...defaultConfiguration.formatting,
