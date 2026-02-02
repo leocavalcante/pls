@@ -34,6 +34,10 @@ export interface PlsConfiguration {
 		parameterNames: boolean;
 		returnTypes: boolean;
 	};
+	inlineValues: {
+		enabled: boolean;
+		maxValueLength: number;
+	};
 }
 
 export const defaultConfiguration: PlsConfiguration = {
@@ -69,6 +73,10 @@ export const defaultConfiguration: PlsConfiguration = {
 		enabled: true,
 		parameterNames: true,
 		returnTypes: true,
+	},
+	inlineValues: {
+		enabled: true,
+		maxValueLength: 50,
 	},
 };
 
@@ -110,6 +118,10 @@ export function updateConfiguration(config: Partial<PlsConfiguration>): void {
 			...currentConfiguration.inlayHints,
 			...(config.inlayHints || {}),
 		},
+		inlineValues: {
+			...currentConfiguration.inlineValues,
+			...(config.inlineValues || {}),
+		},
 	};
 }
 
@@ -128,5 +140,6 @@ export function resetConfiguration(): void {
 		},
 		completion: { ...defaultConfiguration.completion },
 		inlayHints: { ...defaultConfiguration.inlayHints },
+		inlineValues: { ...defaultConfiguration.inlineValues },
 	};
 }
