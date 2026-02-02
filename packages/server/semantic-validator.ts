@@ -259,6 +259,7 @@ export class SemanticValidator {
 					code: SemanticDiagnosticCode.UnusedImport,
 					message: `Unused import '${displayName}'`,
 					range: this.toRange(imp.item.loc),
+					tags: [1], // DiagnosticTag.Unnecessary = 1
 				});
 			}
 		}

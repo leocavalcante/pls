@@ -72,8 +72,8 @@ export function createNamespaceEdit(
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		const match = line.match(/^\s*namespace\s+(\S+)/);
-		if (match) {
-			const startChar = match.index! + match[0].indexOf(match[1]);
+		if (match && match.index !== undefined) {
+			const startChar = match.index + match[0].indexOf(match[1]);
 			const endChar = startChar + match[1].length;
 
 			return {

@@ -139,10 +139,9 @@ describe('File Operations Integration Tests', () => {
 			const userContent = '<?php\n\nnamespace App\\Models;\n\nclass User\n{\n}\n';
 
 			setupDocument('file:///workspace/src/Models/User.php', userContent);
-			definitionIndex.indexDocument(
-				'file:///workspace/src/Models/User.php',
-				asts.get('file:///workspace/src/Models/User.php')!,
-			);
+			const userAst = asts.get('file:///workspace/src/Models/User.php');
+			expect(userAst).toBeDefined();
+			definitionIndex.indexDocument('file:///workspace/src/Models/User.php', userAst as Program);
 
 			const didRenameHandler = createDidRenameFilesHandler(
 				(uri) => asts.get(uri) ?? null,
@@ -430,10 +429,9 @@ class User
 `;
 
 			setupDocument('file:///workspace/src/Models/User.php', userContent);
-			definitionIndex.indexDocument(
-				'file:///workspace/src/Models/User.php',
-				asts.get('file:///workspace/src/Models/User.php')!,
-			);
+			const userAst = asts.get('file:///workspace/src/Models/User.php');
+			expect(userAst).toBeDefined();
+			definitionIndex.indexDocument('file:///workspace/src/Models/User.php', userAst as Program);
 
 			let definitions = definitionIndex.findAllDefinitions('User');
 			expect(definitions.length).toBeGreaterThan(0);
@@ -476,13 +474,14 @@ class UserService
 			setupDocument('file:///workspace/src/Models/User.php', userContent);
 			setupDocument('file:///workspace/src/Services/UserService.php', serviceContent);
 
-			referenceIndex.indexDocument(
-				'file:///workspace/src/Models/User.php',
-				asts.get('file:///workspace/src/Models/User.php')!,
-			);
+			const userAst = asts.get('file:///workspace/src/Models/User.php');
+			const serviceAst = asts.get('file:///workspace/src/Services/UserService.php');
+			expect(userAst).toBeDefined();
+			expect(serviceAst).toBeDefined();
+			referenceIndex.indexDocument('file:///workspace/src/Models/User.php', userAst as Program);
 			referenceIndex.indexDocument(
 				'file:///workspace/src/Services/UserService.php',
-				asts.get('file:///workspace/src/Services/UserService.php')!,
+				serviceAst as Program,
 			);
 
 			// Delete the User file
@@ -507,14 +506,12 @@ class UserService
 			setupDocument('file:///workspace/src/Models/User.php', userContent);
 			setupDocument('file:///workspace/src/Models/Post.php', postContent);
 
-			definitionIndex.indexDocument(
-				'file:///workspace/src/Models/User.php',
-				asts.get('file:///workspace/src/Models/User.php')!,
-			);
-			definitionIndex.indexDocument(
-				'file:///workspace/src/Models/Post.php',
-				asts.get('file:///workspace/src/Models/Post.php')!,
-			);
+			const userAst = asts.get('file:///workspace/src/Models/User.php');
+			const postAst = asts.get('file:///workspace/src/Models/Post.php');
+			expect(userAst).toBeDefined();
+			expect(postAst).toBeDefined();
+			definitionIndex.indexDocument('file:///workspace/src/Models/User.php', userAst as Program);
+			definitionIndex.indexDocument('file:///workspace/src/Models/Post.php', postAst as Program);
 
 			expect(definitionIndex.findAllDefinitions('User').length).toBeGreaterThan(0);
 			expect(definitionIndex.findAllDefinitions('Post').length).toBeGreaterThan(0);
@@ -659,10 +656,14 @@ class UserController
 			const productContent =
 				createEdit?.changes?.['file:///workspace/src/Models/Product.php']?.[0]?.newText;
 			expect(productContent).toContain('class Product');
+			expect(productContent).toBeDefined();
 
-			const productAst = parser.parse(productContent!);
+			const productAst = parser.parse(productContent as string);
 			asts.set('file:///workspace/src/Models/Product.php', productAst);
-			const doc = createMockDocument('file:///workspace/src/Models/Product.php', productContent!);
+			const doc = createMockDocument(
+				'file:///workspace/src/Models/Product.php',
+				productContent as string,
+			);
 			documents.set('file:///workspace/src/Models/Product.php', doc);
 
 			const didCreateHandler = createDidCreateFilesHandler(
@@ -701,7 +702,7 @@ class UserController
 			expect(itemEdits?.some((e) => e.newText === 'Item')).toBe(true);
 
 			asts.delete('file:///workspace/src/Models/Product.php');
-			const itemContent = productContent!.replace('class Product', 'class Item');
+			const itemContent = (productContent as string).replace('class Product', 'class Item');
 			const itemAst = parser.parse(itemContent);
 			asts.set('file:///workspace/src/Models/Item.php', itemAst);
 

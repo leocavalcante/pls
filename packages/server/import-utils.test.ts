@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Parser } from '@pls/parser';
 import {
+	type ExistingImport,
 	buildUseStatement,
 	createImportEdit,
 	findInsertPosition,
@@ -8,7 +9,6 @@ import {
 	isAlreadyImported,
 	needsAlias,
 	parseExistingImports,
-	type ExistingImport,
 } from './import-utils';
 
 const parser = new Parser();
@@ -93,7 +93,13 @@ use App\\Models\\User, App\\Models\\Post;
 
 		test('returns true for matching alias', () => {
 			const imports: ExistingImport[] = [
-				{ fqn: 'App\\Models\\User', alias: 'UserModel', line: 1, isFunction: false, isConst: false },
+				{
+					fqn: 'App\\Models\\User',
+					alias: 'UserModel',
+					line: 1,
+					isFunction: false,
+					isConst: false,
+				},
 			];
 			expect(isAlreadyImported('App\\Models\\User', imports)).toBe(true);
 		});

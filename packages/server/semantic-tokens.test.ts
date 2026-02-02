@@ -16,6 +16,12 @@ interface DecodedToken {
 	modifiers: string[];
 }
 
+interface TokenCacheEntry {
+	version: number;
+	resultId: string;
+	data: number[];
+}
+
 function decodeModifiers(modifierBits: number): string[] {
 	const mods: string[] = [];
 	for (let j = 0; j < tokenModifiers.length; j++) {
@@ -54,6 +60,42 @@ function decodeTokens(data: number[]): DecodedToken[] {
 	return tokens;
 }
 
+function applyDeltaEdits(
+	previous: number[],
+	edits: { start: number; deleteCount: number; data?: number[] }[],
+): number[] {
+	let result = [...previous];
+	for (const edit of edits) {
+		const insert = edit.data ?? [];
+		result = result
+			.slice(0, edit.start)
+			.concat(insert)
+			.concat(result.slice(edit.start + edit.deleteCount));
+	}
+	return result;
+}
+
+function createHandlerWithCache(cache: Map<string, TokenCacheEntry>) {
+	const index = new DefinitionIndex();
+	const manager = new DocumentManager();
+	let document = TextDocument.create('file:///test.php', 'php', 1, '<?php function greet() {}');
+	let data = manager.open(document);
+
+	const handler = createSemanticTokensHandler(
+		() => document,
+		() => data.ast,
+		index,
+		cache,
+	);
+
+	const updateDocument = (text: string, version: number) => {
+		document = TextDocument.create('file:///test.php', 'php', version, text);
+		data = manager.change(document);
+	};
+
+	return { handler, updateDocument };
+}
+
 describe('SemanticTokensHandler', () => {
 	describe('function declarations', () => {
 		test('emits function token with declaration modifier', () => {
@@ -70,7 +112,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -101,7 +143,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -126,7 +168,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -150,7 +192,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -177,7 +219,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -204,7 +246,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -233,7 +275,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -261,7 +303,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -288,7 +330,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -317,7 +359,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -345,7 +387,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -372,7 +414,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -396,7 +438,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -422,7 +464,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -452,7 +494,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -480,7 +522,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -511,7 +553,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -536,7 +578,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -565,7 +607,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -589,7 +631,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -611,7 +653,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -634,7 +676,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 
@@ -649,11 +691,78 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///missing.php' },
 			});
 
 			expect(result.data.length).toBe(0);
+		});
+	});
+
+	describe('delta updates', () => {
+		test('returns delta edits for matching previous resultId', () => {
+			const cache = new Map<string, TokenCacheEntry>();
+			const { handler, updateDocument } = createHandlerWithCache(cache);
+
+			const full = handler.onFull({ textDocument: { uri: 'file:///test.php' } });
+			const prevResultId = full.resultId ?? '';
+
+			updateDocument('<?php function greet() {} function wave() {}', 2);
+			const delta = handler.onDelta({
+				textDocument: { uri: 'file:///test.php' },
+				previousResultId: prevResultId,
+			});
+
+			expect('edits' in delta).toBe(true);
+			if (!('edits' in delta)) {
+				throw new Error('Expected delta edits');
+			}
+			const updated = applyDeltaEdits(full.data, delta.edits);
+			const fullAfter = handler.onFull({ textDocument: { uri: 'file:///test.php' } });
+			expect(updated).toEqual(fullAfter.data);
+		});
+
+		test('returns full tokens for mismatched previous resultId', () => {
+			const cache = new Map<string, TokenCacheEntry>();
+			const { handler, updateDocument } = createHandlerWithCache(cache);
+
+			handler.onFull({ textDocument: { uri: 'file:///test.php' } });
+			updateDocument('<?php function greet() {} function wave() {}', 2);
+			const result = handler.onDelta({
+				textDocument: { uri: 'file:///test.php' },
+				previousResultId: 'mismatch',
+			});
+
+			expect('data' in result).toBe(true);
+		});
+
+		test('returns full tokens when no previous resultId provided', () => {
+			const cache = new Map<string, TokenCacheEntry>();
+			const { handler } = createHandlerWithCache(cache);
+
+			const result = handler.onDelta({
+				textDocument: { uri: 'file:///test.php' },
+				previousResultId: undefined,
+			});
+
+			expect('data' in result).toBe(true);
+		});
+
+		test('returns empty edits when document version unchanged', () => {
+			const cache = new Map<string, TokenCacheEntry>();
+			const { handler } = createHandlerWithCache(cache);
+
+			const full = handler.onFull({ textDocument: { uri: 'file:///test.php' } });
+			const delta = handler.onDelta({
+				textDocument: { uri: 'file:///test.php' },
+				previousResultId: full.resultId ?? '',
+			});
+
+			expect('edits' in delta).toBe(true);
+			if (!('edits' in delta)) {
+				throw new Error('Expected delta edits');
+			}
+			expect(delta.edits.length).toBe(0);
 		});
 	});
 
@@ -671,7 +780,7 @@ describe('SemanticTokensHandler', () => {
 				index,
 			);
 
-			const result = handler({
+			const result = handler.onFull({
 				textDocument: { uri: 'file:///test.php' },
 			});
 

@@ -2,11 +2,13 @@ import { Parser } from '@pls/parser';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
 	DidChangeConfigurationNotification,
+	DidChangeWatchedFilesNotification,
 	type InitializeParams,
 	type InitializeResult,
 	ProposedFeatures,
 	TextDocumentSyncKind,
 	TextDocuments,
+	WatchKind,
 	createConnection,
 } from 'vscode-languageserver/node';
 import { type BackgroundIndexer, createBackgroundIndexer } from './background-indexer';
@@ -21,6 +23,7 @@ import {
 } from './handlers/call-hierarchy';
 import { createCodeActionHandler } from './handlers/code-actions';
 import { createCodeLensHandler, createCodeLensResolveHandler } from './handlers/code-lens';
+import { createColorProviderHandler } from './handlers/color-provider';
 import { createCompletionHandler, createCompletionResolveHandler } from './handlers/completion';
 import { createDeclarationHandler } from './handlers/declaration';
 import { createDefinitionHandler } from './handlers/definition';
@@ -33,6 +36,7 @@ import { createDocumentHighlightsHandler } from './handlers/document-highlights'
 import { createDocumentLinksHandler } from './handlers/document-links';
 import { createExecuteCommandHandler, getRegisteredCommands } from './handlers/execute-command';
 import {
+	createDidChangeWatchedFilesHandler,
 	createDidCreateFilesHandler,
 	createDidDeleteFilesHandler,
 	createDidRenameFilesHandler,
@@ -52,6 +56,7 @@ import { createInlayHintsHandler } from './handlers/inlay-hints';
 import { createInlineCompletionHandler } from './handlers/inline-completion';
 import { createInlineValueHandler } from './handlers/inline-values';
 import { createLinkedEditingHandler } from './handlers/linked-editing';
+import { createMonikerHandler } from './handlers/moniker';
 import {
 	ON_TYPE_TRIGGER_CHARACTERS,
 	createOnTypeFormattingHandler,
@@ -68,6 +73,7 @@ import { createSignatureHelpHandler } from './handlers/signature-help';
 import { createTypeDefinitionHandler } from './handlers/type-definition';
 import { createTypeHierarchyHandler } from './handlers/type-hierarchy';
 import { createWorkspaceSymbolsHandler } from './handlers/workspace-symbols';
+import { ProgressManager } from './progress-manager';
 import { parsePsr4Config } from './psr4-resolver';
 import { ReferenceIndex } from './reference-index';
 import { SemanticValidator } from './semantic-validator';
@@ -88,16 +94,21 @@ const semanticValidator = new SemanticValidator(
 	getConfiguration(),
 );
 const parser = new Parser();
+const progressManager = new ProgressManager(connection);
 
 let backgroundIndexer: BackgroundIndexer | null = null;
 let initializeParams: InitializeParams;
 let workspaceFolders: { uri: string; name: string }[] = [];
 let hasConfigurationCapability = false;
+let hasWatchedFilesCapability = false;
+let isShuttingDown = false;
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
 	initializeParams = params;
 	workspaceFolders = params.workspaceFolders ?? [];
 	hasConfigurationCapability = !!params.capabilities.workspace?.configuration;
+	hasWatchedFilesCapability =
+		!!params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration;
 	connection.console.log('PHP Language Server initializing...');
 
 	return {
@@ -117,7 +128,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			signatureHelpProvider: {
 				triggerCharacters: ['(', ','],
 			},
-			workspaceSymbolProvider: true,
+			workspaceSymbolProvider: {
+				resolveProvider: true,
+			},
 			documentFormattingProvider: true,
 			documentRangeFormattingProvider: true,
 			documentOnTypeFormattingProvider: {
@@ -140,7 +153,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 					tokenTypes,
 					tokenModifiers,
 				},
-				full: true,
+				full: { delta: true },
 			},
 			inlayHintProvider: true,
 			inlineValueProvider: true,
@@ -151,6 +164,8 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			foldingRangeProvider: true,
 			selectionRangeProvider: true,
 			linkedEditingRangeProvider: true,
+			monikerProvider: true,
+			colorProvider: true,
 			codeLensProvider: {
 				resolveProvider: true,
 			},
@@ -205,11 +220,24 @@ connection.onInitialized(() => {
 		});
 	}
 
+	// Register file watchers for external file changes (git, composer, etc.)
+	if (hasWatchedFilesCapability) {
+		connection.client.register(DidChangeWatchedFilesNotification.type, {
+			watchers: [
+				{ globPattern: '**/*.php', kind: WatchKind.Create | WatchKind.Change | WatchKind.Delete },
+				{ globPattern: '**/composer.json', kind: WatchKind.Change },
+				{ globPattern: '**/composer.lock', kind: WatchKind.Change },
+			],
+		});
+		connection.console.log('Registered file watchers for external changes');
+	}
+
 	backgroundIndexer = createBackgroundIndexer(
 		initializeParams,
 		definitionIndex,
 		referenceIndex,
 		connection,
+		progressManager,
 	);
 
 	if (backgroundIndexer) {
@@ -334,7 +362,9 @@ connection.onSignatureHelp(
 	),
 );
 
-connection.onWorkspaceSymbol(createWorkspaceSymbolsHandler(definitionIndex));
+const workspaceSymbolsHandler = createWorkspaceSymbolsHandler(definitionIndex, progressManager);
+connection.onWorkspaceSymbol(workspaceSymbolsHandler.onSymbol);
+connection.onWorkspaceSymbolResolve(workspaceSymbolsHandler.onResolve);
 
 connection.onDocumentFormatting(createFormattingHandler((uri) => documents.get(uri)));
 
@@ -407,13 +437,13 @@ connection.languages.callHierarchy.onOutgoingCalls(
 	),
 );
 
-connection.languages.semanticTokens.on(
-	createSemanticTokensHandler(
-		(uri) => documents.get(uri),
-		(uri) => documentManager.getAst(uri),
-		definitionIndex,
-	),
+const semanticTokensHandler = createSemanticTokensHandler(
+	(uri) => documents.get(uri),
+	(uri) => documentManager.getAst(uri),
+	definitionIndex,
 );
+connection.languages.semanticTokens.on(semanticTokensHandler.onFull);
+connection.languages.semanticTokens.onDelta(semanticTokensHandler.onDelta);
 
 connection.languages.inlayHint.on(
 	createInlayHintsHandler(
@@ -447,6 +477,22 @@ connection.onDocumentHighlight(
 );
 
 connection.onDocumentLinks(createDocumentLinksHandler((uri) => documents.get(uri), parser));
+
+connection.languages.moniker.on(
+	createMonikerHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+	),
+);
+
+const colorProviderHandler = createColorProviderHandler(
+	(uri) => documents.get(uri),
+	(uri) => documentManager.getAst(uri),
+);
+
+connection.languages.color.onDocumentColor(colorProviderHandler.onDocumentColor);
+connection.languages.color.onColorPresentation(colorProviderHandler.onColorPresentation);
 
 connection.onFoldingRanges(
 	createFoldingRangeHandler(
@@ -512,6 +558,40 @@ connection.workspace.onDidRenameFiles(
 connection.workspace.onWillDeleteFiles(createWillDeleteFilesHandler());
 
 connection.workspace.onDidDeleteFiles(createDidDeleteFilesHandler(definitionIndex, referenceIndex));
+
+// Handle external file changes (git operations, composer install, etc.)
+connection.onDidChangeWatchedFiles(
+	createDidChangeWatchedFilesHandler(
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+		referenceIndex,
+		documentManager,
+	),
+);
+
+// LSP Lifecycle: shutdown request - prepare for exit but don't terminate yet
+connection.onShutdown(() => {
+	connection.console.log('Shutting down PHP Language Server...');
+	isShuttingDown = true;
+
+	// Stop background indexing
+	if (backgroundIndexer) {
+		backgroundIndexer.stop();
+		backgroundIndexer = null;
+	}
+
+	// Clear all indexes to free memory
+	definitionIndex.clear();
+	referenceIndex.clear();
+
+	connection.console.log('Shutdown complete');
+});
+
+// LSP Lifecycle: exit notification - terminate the process
+connection.onExit(() => {
+	connection.console.log('Exiting PHP Language Server');
+	process.exit(0);
+});
 
 documents.listen(connection);
 

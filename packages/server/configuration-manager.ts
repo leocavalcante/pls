@@ -78,18 +78,18 @@ export class ConfigurationManager {
 				...defaultConfiguration.completion,
 				...(config.completion || {}),
 			},
-		inlayHints: {
-			...defaultConfiguration.inlayHints,
-			...(config.inlayHints || {}),
-		},
-		inlineValues: {
-			...defaultConfiguration.inlineValues,
-			...(config.inlineValues || {}),
-		},
-		inlineCompletion: {
-			...defaultConfiguration.inlineCompletion,
-			...(config.inlineCompletion || {}),
-		},
-	};
+			inlayHints: {
+				...defaultConfiguration.inlayHints,
+				...(config.inlayHints || {}),
+			},
+			inlineValues: {
+				...defaultConfiguration.inlineValues,
+				...(config.inlineValues || {}),
+			},
+			inlineCompletion: {
+				...defaultConfiguration.inlineCompletion,
+				...(config.inlineCompletion || {}),
+			},
+		};
 	}
 }

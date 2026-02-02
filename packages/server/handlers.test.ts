@@ -123,7 +123,7 @@ describe('WorkspaceSymbolsHandler', () => {
 		index.indexDocument('file:///test.php', data.ast);
 
 		const handler = createWorkspaceSymbolsHandler(index);
-		const result = handler({ query: '' });
+		const result = handler.onSymbol({ query: '' });
 
 		expect(result.length).toBe(2);
 	});
@@ -142,7 +142,7 @@ describe('WorkspaceSymbolsHandler', () => {
 		index.indexDocument('file:///test.php', data.ast);
 
 		const handler = createWorkspaceSymbolsHandler(index);
-		const result = handler({ query: 'foo' });
+		const result = handler.onSymbol({ query: 'foo' });
 
 		expect(result.length).toBe(1);
 		expect(result[0].name).toBe('foobar');
