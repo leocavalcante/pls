@@ -79,7 +79,7 @@ async function runBenchmarks() {
 		);
 
 		if (fileSize === 1000 && avg > 100) {
-			console.warn(`  ⚠️  WARNING: Exceeds 100ms target!`);
+			console.warn('  ⚠️  WARNING: Exceeds 100ms target!');
 		}
 	}
 }

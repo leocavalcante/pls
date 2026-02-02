@@ -101,7 +101,7 @@ async function runBenchmarks() {
 		);
 
 		if (count === 1000 && avg > 50) {
-			console.warn(`  ⚠️  WARNING: Exceeds 50ms target!`);
+			console.warn('  ⚠️  WARNING: Exceeds 50ms target!');
 		}
 	}
 
@@ -119,7 +119,7 @@ async function runBenchmarks() {
 	);
 
 	if (resolveAvg > 5) {
-		console.warn(`  ⚠️  WARNING: Exceeds 5ms target!`);
+		console.warn('  ⚠️  WARNING: Exceeds 5ms target!');
 	}
 
 	console.log('\n✅ Benchmarks complete!');
