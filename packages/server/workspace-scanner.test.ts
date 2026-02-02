@@ -83,6 +83,16 @@ describe('Workspace Scanner', () => {
 				expect(file.startsWith('file://')).toBe(true);
 			}
 		});
+
+		test('reports progress updates when enabled', async () => {
+			const updates: string[] = [];
+			await scanWorkspace(TEST_DIR, {
+				onProgress: (message) => updates.push(message),
+			});
+
+			expect(updates.length).toBeGreaterThan(0);
+			expect(updates[updates.length - 1]).toContain('Scanning complete');
+		});
 	});
 
 	describe('getWorkspaceRoot', () => {

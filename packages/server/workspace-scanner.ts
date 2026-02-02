@@ -3,6 +3,7 @@ import { Glob } from 'bun';
 
 export interface ScanOptions {
 	exclude?: string[];
+	onProgress?: (message: string, scanned: number) => void;
 }
 
 const DEFAULT_EXCLUDES = ['**/vendor/**', '**/node_modules/**', '**/.git/**', '**/cache/**'];
@@ -15,15 +16,24 @@ export async function scanWorkspace(
 	const glob = new Glob('**/*.php');
 
 	const files: string[] = [];
+	let scanned = 0;
 
 	for await (const file of glob.scan({
 		cwd: workspacePath,
 		absolute: true,
 		onlyFiles: true,
 	})) {
+		scanned += 1;
+		if (options.onProgress) {
+			options.onProgress(`Scanning files... ${scanned}`, scanned);
+		}
 		if (!shouldExclude(file, workspacePath, excludePatterns)) {
 			files.push(pathToFileURL(file).toString());
 		}
+	}
+
+	if (options.onProgress) {
+		options.onProgress(`Scanning complete: ${scanned} files`, scanned);
 	}
 
 	return files;
