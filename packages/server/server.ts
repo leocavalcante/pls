@@ -11,7 +11,11 @@ import {
 import { type BackgroundIndexer, createBackgroundIndexer } from './background-indexer';
 import { DefinitionIndex } from './definition-index';
 import { DocumentManager } from './document-manager';
-import { createWorkspaceDiagnosticHandler } from './handlers/diagnostics';
+import {
+	createDiagnosticHandler,
+	createWorkspaceDiagnosticHandler,
+	DiagnosticResultCache,
+} from './handlers/diagnostics';
 import { SemanticValidator } from './semantic-validator';
 import { getConfiguration } from './configuration';
 import {
@@ -24,7 +28,6 @@ import { createCodeLensHandler, createCodeLensResolveHandler } from './handlers/
 import { createCompletionHandler } from './handlers/completion';
 import { createDeclarationHandler } from './handlers/declaration';
 import { createDefinitionHandler } from './handlers/definition';
-import { createDiagnosticHandler } from './handlers/diagnostics';
 import { createDocumentHighlightsHandler } from './handlers/document-highlights';
 import { createDocumentLinksHandler } from './handlers/document-links';
 import { createExecuteCommandHandler, getRegisteredCommands } from './handlers/execute-command';
@@ -69,6 +72,7 @@ const documentManager = new DocumentManager();
 const symbolExtractor = new SymbolExtractor();
 const definitionIndex = new DefinitionIndex();
 const referenceIndex = new ReferenceIndex();
+const diagnosticResultCache = new DiagnosticResultCache();
 const semanticValidator = new SemanticValidator(
 	definitionIndex,
 	referenceIndex,
@@ -326,6 +330,7 @@ connection.languages.diagnostics.onWorkspace(
 		documentManager,
 		() => documents.all(),
 		(uri) => documentManager.getAst(uri),
+		diagnosticResultCache,
 		semanticValidator,
 	),
 );
