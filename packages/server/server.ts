@@ -45,6 +45,7 @@ import { createFormattingHandler, createRangeFormattingHandler } from './handler
 import { createHoverHandler } from './handlers/hover';
 import { createImplementationHandler } from './handlers/implementation';
 import { createInlayHintsHandler } from './handlers/inlay-hints';
+import { createInlineCompletionHandler } from './handlers/inline-completion';
 import { createInlineValueHandler } from './handlers/inline-values';
 import { createLinkedEditingHandler } from './handlers/linked-editing';
 import {
@@ -138,6 +139,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			},
 			inlayHintProvider: true,
 			inlineValueProvider: true,
+			inlineCompletionProvider: true,
 			documentLinkProvider: {
 				resolveProvider: false,
 			},
@@ -414,6 +416,15 @@ connection.languages.inlineValue.on(
 		(uri) => documentManager.getAst(uri),
 		definitionIndex,
 		(uri) => configurationManager.getConfiguration(uri).then((c) => c.inlineValues),
+	),
+);
+
+connection.languages.inlineCompletion.on(
+	createInlineCompletionHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+		(uri) => configurationManager.getConfiguration(uri).then((c) => c.inlineCompletion),
 	),
 );
 

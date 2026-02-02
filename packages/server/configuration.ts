@@ -38,6 +38,11 @@ export interface PlsConfiguration {
 		enabled: boolean;
 		maxValueLength: number;
 	};
+	inlineCompletion?: {
+		enabled: boolean;
+		maxSuggestions: number;
+		triggerCharacters: string[];
+	};
 }
 
 export const defaultConfiguration: PlsConfiguration = {
@@ -77,6 +82,11 @@ export const defaultConfiguration: PlsConfiguration = {
 	inlineValues: {
 		enabled: true,
 		maxValueLength: 50,
+	},
+	inlineCompletion: {
+		enabled: true,
+		maxSuggestions: 5,
+		triggerCharacters: [' ', '\t', '{', ';'],
 	},
 };
 
@@ -122,6 +132,10 @@ export function updateConfiguration(config: Partial<PlsConfiguration>): void {
 			...currentConfiguration.inlineValues,
 			...(config.inlineValues || {}),
 		},
+		inlineCompletion: {
+			...currentConfiguration.inlineCompletion,
+			...(config.inlineCompletion || {}),
+		},
 	};
 }
 
@@ -141,5 +155,6 @@ export function resetConfiguration(): void {
 		completion: { ...defaultConfiguration.completion },
 		inlayHints: { ...defaultConfiguration.inlayHints },
 		inlineValues: { ...defaultConfiguration.inlineValues },
+		inlineCompletion: { ...defaultConfiguration.inlineCompletion },
 	};
 }
