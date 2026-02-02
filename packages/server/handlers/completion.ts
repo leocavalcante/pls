@@ -1,3 +1,5 @@
+import type { Program } from '@pls/parser';
+import { Parser } from '@pls/parser';
 import type {
 	CompletionItem,
 	CompletionItemKind,
@@ -7,6 +9,15 @@ import type {
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { PlsConfiguration } from '../configuration';
 import type { DefinitionIndex, IndexedSymbol, SymbolKind } from '../definition-index';
+import {
+	type ExistingImport,
+	createImportEdit,
+	findInsertPosition,
+	getShortName,
+	isAlreadyImported,
+	needsAlias,
+	parseExistingImports,
+} from '../import-utils';
 import { getWordAtPosition } from '../position-utils';
 
 const kindMap: Record<SymbolKind, CompletionItemKind> = {
@@ -41,6 +52,10 @@ export interface CompletionItemData {
 	symbolId: string;
 	kind: SymbolKind;
 	container?: string;
+	/** FQN to import (if auto-import is needed) */
+	importFqn?: string;
+	/** Alias for the import (if needed for disambiguation) */
+	importAlias?: string;
 }
 
 function createCompletionItem(symbol: IndexedSymbol): CompletionItem {
@@ -59,6 +74,7 @@ export function createCompletionHandler(
 	getDocument: (uri: string) => TextDocument | undefined,
 	index: DefinitionIndex,
 	getConfig?: (uri: string) => Promise<PlsConfiguration>,
+	getAst?: (uri: string) => Program | undefined,
 ) {
 	return async (params: CompletionParams): Promise<CompletionItem[]> => {
 		const document = getDocument(params.textDocument.uri);
@@ -70,6 +86,26 @@ export function createCompletionHandler(
 		const word = getWordAtPosition(document.getText(), params.position) ?? '';
 		const prefix = extractPrefix(word);
 
+		// Parse the document to get existing imports and namespace
+		let existingImports: ExistingImport[] = [];
+		let insertPosition = { line: 0, character: 0 };
+		let currentNamespace: string | null = null;
+
+		if (getAst) {
+			const ast = getAst(params.textDocument.uri);
+			if (ast) {
+				existingImports = parseExistingImports(ast);
+				insertPosition = findInsertPosition(ast, existingImports);
+				// Find current namespace from AST
+				for (const stmt of ast.statements) {
+					if (stmt.kind === 'NamespaceStatement') {
+						currentNamespace = stmt.name?.name ?? null;
+						break;
+					}
+				}
+			}
+		}
+
 		const items: CompletionItem[] = [];
 		const seen = new Set<string>();
 
@@ -79,11 +115,60 @@ export function createCompletionHandler(
 			if (seen.has(symbol.name)) continue;
 
 			seen.add(symbol.name);
-			items.push(createCompletionItem(symbol));
+
+			// Check if this symbol needs to be imported
+			const needsImport =
+				symbol.fqn &&
+				symbol.namespace !== currentNamespace &&
+				!isAlreadyImported(symbol.fqn, existingImports);
+
+			if (needsImport) {
+				items.push(createCompletionItemWithImport(symbol, existingImports, insertPosition));
+			} else {
+				items.push(createCompletionItem(symbol));
+			}
 		}
 
 		return items;
 	};
+}
+
+function createCompletionItemWithImport(
+	symbol: IndexedSymbol,
+	existingImports: ExistingImport[],
+	insertPosition: { line: number; character: number },
+): CompletionItem {
+	const needsAliasValue = symbol.fqn ? needsAlias(symbol.fqn, existingImports, null) : false;
+	const alias = needsAliasValue && symbol.fqn ? generateImportAlias(symbol.fqn) : undefined;
+
+	const item: CompletionItem = {
+		label: createCompletionLabel(symbol),
+		kind: kindMap[symbol.kind],
+		detail: symbol.fqn,
+		data: {
+			symbolId: `${symbol.name}:${symbol.kind}`,
+			kind: symbol.kind,
+			container: symbol.container,
+			importFqn: symbol.fqn,
+			importAlias: alias,
+		} satisfies CompletionItemData,
+	};
+
+	// Add the import edit
+	if (symbol.fqn) {
+		item.additionalTextEdits = [createImportEdit(symbol.fqn, insertPosition, alias)];
+	}
+
+	return item;
+}
+
+function generateImportAlias(fqn: string): string {
+	const parts = fqn.split('\\');
+	if (parts.length >= 2) {
+		// Use last two parts concatenated (e.g., "ModelsUser" for "App\Models\User")
+		return parts.slice(-2).join('');
+	}
+	return fqn;
 }
 
 function parseCompletionData(data: unknown): CompletionItemData | null {

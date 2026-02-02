@@ -316,6 +316,7 @@ connection.onCompletion(
 		(uri) => documents.get(uri),
 		definitionIndex,
 		(uri) => configurationManager.getConfiguration(uri),
+		(uri) => documentManager.getAst(uri),
 	),
 );
 
