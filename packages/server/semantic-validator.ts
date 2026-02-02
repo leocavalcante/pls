@@ -8,6 +8,7 @@ import type {
 	Statement,
 	StaticCallExpression,
 	TypeNode,
+	UseItem,
 } from '@pls/parser';
 import { DiagnosticSeverity } from 'vscode-languageserver';
 import type { PlsConfiguration } from './configuration';
@@ -39,6 +40,9 @@ export class SemanticValidator {
 		}
 		if (this.config.diagnostics.semanticChecks.undefinedFunction) {
 			diagnostics.push(...this.checkUndefinedFunctions(uri, ast));
+		}
+		if (this.config.diagnostics.semanticChecks.unusedImports) {
+			diagnostics.push(...this.checkUnusedImports(uri, ast));
 		}
 
 		return diagnostics;
@@ -141,11 +145,191 @@ export class SemanticValidator {
 		return diagnostics;
 	}
 
-	private checkUnusedImports(): SemanticDiagnostic[] {
-		void this.definitionIndex;
-		void this.referenceIndex;
-		void this.config;
-		return [];
+	private checkUnusedImports(uri: string, ast: Program): SemanticDiagnostic[] {
+		const diagnostics: SemanticDiagnostic[] = [];
+
+		const imports: Array<{
+			name: string;
+			alias: string | null;
+			effectiveName: string;
+			item: UseItem;
+		}> = [];
+
+		for (const statement of ast.statements) {
+			if (statement.kind === 'NamespaceStatement' && statement.body) {
+				for (const innerStmt of statement.body) {
+					if (innerStmt.kind === 'UseStatement' && innerStmt.type === 'class') {
+						for (const item of innerStmt.items) {
+							const nameParts = item.name.name.split('\\');
+							const shortName = nameParts[nameParts.length - 1] ?? item.name.name;
+							imports.push({
+								name: item.name.name,
+								alias: item.alias?.name ?? null,
+								effectiveName: item.alias?.name ?? shortName,
+								item,
+							});
+						}
+					}
+				}
+			}
+			if (statement.kind === 'UseStatement' && statement.type === 'class') {
+				for (const item of statement.items) {
+					const nameParts = item.name.name.split('\\');
+					const shortName = nameParts[nameParts.length - 1] ?? item.name.name;
+					imports.push({
+						name: item.name.name,
+						alias: item.alias?.name ?? null,
+						effectiveName: item.alias?.name ?? shortName,
+						item,
+					});
+				}
+			}
+		}
+
+		if (imports.length === 0) {
+			void uri;
+			return [];
+		}
+
+		const usedNames = new Set<string>();
+
+		const collectUsage = (name: string): void => {
+			usedNames.add(name);
+			if (name.startsWith('\\')) {
+				usedNames.add(name.slice(1));
+			}
+		};
+
+		const checkTypeNode = (type: TypeNode | null): void => {
+			if (!type) return;
+			switch (type.kind) {
+				case 'SimpleType':
+					collectUsage(type.name);
+					break;
+				case 'NullableType':
+					checkTypeNode(type.type);
+					break;
+				case 'UnionType':
+				case 'IntersectionType':
+					for (const innerType of type.types) {
+						checkTypeNode(innerType);
+					}
+					break;
+			}
+		};
+
+		traverseProgram(ast, {
+			onNewExpression: (expr) => {
+				if (expr.class.kind === 'Identifier') {
+					collectUsage(expr.class.name);
+				}
+			},
+			onStaticCallExpression: (expr) => {
+				if (expr.class.kind === 'Identifier') {
+					collectUsage(expr.class.name);
+				}
+			},
+			onParameter: (param) => {
+				checkTypeNode(param.type);
+			},
+			onPropertyDeclaration: (prop) => {
+				checkTypeNode(prop.type);
+			},
+		});
+
+		this.collectInstanceofUsages(ast, usedNames);
+
+		for (const imp of imports) {
+			if (!usedNames.has(imp.effectiveName)) {
+				const displayName = imp.alias ? `${imp.name} as ${imp.alias}` : imp.name;
+				diagnostics.push({
+					severity: DiagnosticSeverity.Warning,
+					code: SemanticDiagnosticCode.UnusedImport,
+					message: `Unused import '${displayName}'`,
+					range: this.toRange(imp.item.loc),
+				});
+			}
+		}
+
+		return diagnostics;
+	}
+
+	private collectInstanceofUsages(ast: Program, usedNames: Set<string>): void {
+		const collectFromExpr = (expr: Expression): void => {
+			if (expr.kind === 'InstanceofExpression') {
+				if (expr.right.kind === 'Identifier') {
+					usedNames.add(expr.right.name);
+				}
+			}
+			switch (expr.kind) {
+				case 'BinaryExpression':
+				case 'NullCoalesceExpression':
+					collectFromExpr(expr.left);
+					collectFromExpr(expr.right);
+					break;
+				case 'UnaryExpression':
+				case 'CloneExpression':
+				case 'PrintExpression':
+					collectFromExpr(expr.argument);
+					break;
+				case 'TernaryExpression':
+					collectFromExpr(expr.test);
+					if (expr.consequent) collectFromExpr(expr.consequent);
+					collectFromExpr(expr.alternate);
+					break;
+				case 'InstanceofExpression':
+					collectFromExpr(expr.left);
+					break;
+				case 'ParenthesizedExpression':
+					collectFromExpr(expr.expression);
+					break;
+				case 'AssignmentExpression':
+					collectFromExpr(expr.right);
+					break;
+			}
+		};
+
+		const collectFromStmt = (stmt: Statement): void => {
+			switch (stmt.kind) {
+				case 'ExpressionStatement':
+					collectFromExpr(stmt.expression);
+					break;
+				case 'ReturnStatement':
+					if (stmt.argument) collectFromExpr(stmt.argument);
+					break;
+				case 'IfStatement':
+					collectFromExpr(stmt.test);
+					collectFromStmt(stmt.consequent);
+					if (stmt.alternate) collectFromStmt(stmt.alternate);
+					break;
+				case 'BlockStatement':
+					for (const s of stmt.statements) collectFromStmt(s);
+					break;
+				case 'NamespaceStatement':
+					if (stmt.body) for (const s of stmt.body) collectFromStmt(s);
+					break;
+				case 'FunctionDeclaration':
+					collectFromStmt(stmt.body);
+					break;
+				case 'ClassDeclaration':
+				case 'TraitDeclaration':
+					for (const member of stmt.body.members) {
+						if (member.kind === 'MethodDeclaration' && member.body) {
+							collectFromStmt(member.body);
+						}
+					}
+					break;
+				case 'WhileStatement':
+				case 'DoWhileStatement':
+					collectFromExpr(stmt.test);
+					collectFromStmt(stmt.body);
+					break;
+			}
+		};
+
+		for (const stmt of ast.statements) {
+			collectFromStmt(stmt);
+		}
 	}
 
 	private checkUndefinedMethods(): SemanticDiagnostic[] {

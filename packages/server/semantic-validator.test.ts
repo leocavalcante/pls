@@ -140,4 +140,138 @@ describe('SemanticValidator', () => {
 			expect(diagnostics).toEqual([]);
 		});
 	});
+
+	describe('unused imports detection', () => {
+		const parser = new Parser();
+		const configOnlyUnusedImports = {
+			...defaultConfiguration,
+			diagnostics: {
+				...defaultConfiguration.diagnostics,
+				semanticChecks: {
+					...defaultConfiguration.diagnostics.semanticChecks,
+					undefinedClass: false,
+					undefinedFunction: false,
+				},
+			},
+		};
+
+		test('reports unused import', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUnusedImports,
+			);
+			const ast = parser.parse('<?php use App\\UnusedClass;');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.code).toBe(SemanticDiagnosticCode.UnusedImport);
+			expect(diagnostics[0]?.severity).toBe(DiagnosticSeverity.Warning);
+			expect(diagnostics[0]?.message).toBe("Unused import 'App\\UnusedClass'");
+		});
+
+		test('does not report import used with new', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUnusedImports,
+			);
+			const ast = parser.parse('<?php use App\\UsedClass; $x = new UsedClass();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('does not report import used with alias', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUnusedImports,
+			);
+			const ast = parser.parse('<?php use App\\MyClass as Alias; $x = new Alias();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('does not report import used in type hint', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUnusedImports,
+			);
+			const ast = parser.parse('<?php use App\\MyClass; function foo(MyClass $x) {}');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('does not report import used in static call', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUnusedImports,
+			);
+			const ast = parser.parse('<?php use App\\MyClass; MyClass::method();');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('does not report import used in instanceof', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUnusedImports,
+			);
+			const ast = parser.parse('<?php use App\\MyClass; if ($x instanceof MyClass) {}');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('respects unusedImports config toggle', () => {
+			const config = {
+				...defaultConfiguration,
+				diagnostics: {
+					...defaultConfiguration.diagnostics,
+					semanticChecks: {
+						...defaultConfiguration.diagnostics.semanticChecks,
+						unusedImports: false,
+					},
+				},
+			};
+			const validator = new SemanticValidator(new DefinitionIndex(), new ReferenceIndex(), config);
+			const ast = parser.parse('<?php use App\\UnusedClass;');
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('handles namespaced files', () => {
+			const validator = new SemanticValidator(
+				new DefinitionIndex(),
+				new ReferenceIndex(),
+				configOnlyUnusedImports,
+			);
+			const ast = parser.parse(`<?php
+namespace MyApp;
+use App\\UnusedClass;
+use App\\UsedClass;
+$x = new UsedClass();
+`);
+
+			const diagnostics = validator.validateDocument('file:///test.php', ast);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.message).toBe("Unused import 'App\\UnusedClass'");
+		});
+	});
 });
