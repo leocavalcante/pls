@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Parser, type Program } from '@pls/parser';
-import type {
-	CreateFilesParams,
-	DeleteFilesParams,
-	RenameFilesParams,
+import {
+	type CreateFilesParams,
+	type DeleteFilesParams,
+	type DidChangeWatchedFilesParams,
+	FileChangeType,
+	type RenameFilesParams,
 } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { DefinitionIndex } from '../definition-index';
 import type { Psr4Config } from '../psr4-resolver';
 import type { ReferenceIndex } from '../reference-index';
 import {
+	createDidChangeWatchedFilesHandler,
 	createDidCreateFilesHandler,
 	createDidDeleteFilesHandler,
 	createDidRenameFilesHandler,
@@ -108,15 +111,19 @@ function createMockReferenceIndex(): ReferenceIndex {
 }
 
 describe('File Operations', () => {
+	let asts: Map<string, Program>;
+
+	beforeEach(() => {
+		asts = new Map();
+	});
+
 	describe('createWillRenameFilesHandler', () => {
 		let documents: Map<string, TextDocument>;
-		let asts: Map<string, Program>;
 		let psr4Config: Psr4Config | null;
 		let workspaceRoot: string;
 
 		beforeEach(() => {
 			documents = new Map();
-			asts = new Map();
 			psr4Config = createMockPsr4Config();
 			workspaceRoot = '/workspace';
 		});
@@ -952,6 +959,214 @@ class SomeClass
 
 			const defCalls = defIndex.getCalls();
 			expect(defCalls.filter((c) => c.method === 'clearDocument').length).toBe(2);
+		});
+	});
+
+	describe('createDidChangeWatchedFilesHandler', () => {
+		let defIndex: DefinitionIndex & {
+			getCalls: () => { method: string; args: unknown[] }[];
+			resetCalls: () => void;
+		};
+		let refIndex: ReferenceIndex & {
+			getCalls: () => { method: string; args: unknown[] }[];
+			resetCalls: () => void;
+		};
+		let openUris: Set<string>;
+
+		beforeEach(() => {
+			defIndex = createMockDefinitionIndex();
+			refIndex = createMockReferenceIndex();
+			openUris = new Set();
+		});
+
+		function createHandler() {
+			return createDidChangeWatchedFilesHandler(
+				(uri) => asts.get(uri) ?? null,
+				defIndex,
+				refIndex,
+				{
+					isOpen: (uri: string) => openUris.has(uri),
+				} as unknown as DocumentManager,
+			);
+		}
+
+		test('indexes newly created PHP files', () => {
+			const content = `<?php
+namespace App\Models;
+class User {}
+`;
+			asts.set('file:///workspace/src/Models/User.php', parser.parse(content));
+
+			const handler = createHandler();
+			const params: DidChangeWatchedFilesParams = {
+				changes: [
+					{
+						uri: 'file:///workspace/src/Models/User.php',
+						type: FileChangeType.Created,
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.some((c) => c.method === 'indexDocument')).toBe(true);
+		});
+
+		test('re-indexes changed PHP files', () => {
+			const content = `<?php
+namespace App\Models;
+class User {}
+`;
+			asts.set('file:///workspace/src/Models/User.php', parser.parse(content));
+
+			const handler = createHandler();
+			const params: DidChangeWatchedFilesParams = {
+				changes: [
+					{
+						uri: 'file:///workspace/src/Models/User.php',
+						type: FileChangeType.Changed,
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.filter((c) => c.method === 'clearDocument').length).toBe(1);
+			expect(defCalls.filter((c) => c.method === 'indexDocument').length).toBe(1);
+		});
+
+		test('clears deleted files from indexes', () => {
+			const handler = createHandler();
+			const params: DidChangeWatchedFilesParams = {
+				changes: [
+					{
+						uri: 'file:///workspace/src/Models/User.php',
+						type: FileChangeType.Deleted,
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(
+				defCalls.some(
+					(c) =>
+						c.method === 'clearDocument' && c.args[0] === 'file:///workspace/src/Models/User.php',
+				),
+			).toBe(true);
+
+			const refCalls = refIndex.getCalls();
+			expect(
+				refCalls.some(
+					(c) =>
+						c.method === 'clearDocument' && c.args[0] === 'file:///workspace/src/Models/User.php',
+				),
+			).toBe(true);
+		});
+
+		test('skips open documents (handled by textDocument/didChange)', () => {
+			const content = `<?php
+namespace App\Models;
+class User {}
+`;
+			const uri = 'file:///workspace/src/Models/User.php';
+			asts.set(uri, parser.parse(content));
+			openUris.add(uri);
+
+			const handler = createHandler();
+			const params: DidChangeWatchedFilesParams = {
+				changes: [
+					{
+						uri,
+						type: FileChangeType.Changed,
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.length).toBe(0);
+		});
+
+		test('skips non-PHP files', () => {
+			const handler = createHandler();
+			const params: DidChangeWatchedFilesParams = {
+				changes: [
+					{
+						uri: 'file:///workspace/README.md',
+						type: FileChangeType.Created,
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.length).toBe(0);
+		});
+
+		test('skips vendor files', () => {
+			const content = `<?php
+namespace Vendor\Package;
+class SomeClass {}
+`;
+			asts.set('file:///workspace/vendor/vendor/package/src/SomeClass.php', parser.parse(content));
+
+			const handler = createHandler();
+			const params: DidChangeWatchedFilesParams = {
+				changes: [
+					{
+						uri: 'file:///workspace/vendor/vendor/package/src/SomeClass.php',
+						type: FileChangeType.Created,
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.length).toBe(0);
+		});
+
+		test('handles multiple file changes', () => {
+			const userContent = `<?php
+namespace App\Models;
+class User {}
+`;
+			const postContent = `<?php
+namespace App\Models;
+class Post {}
+`;
+			asts.set('file:///workspace/src/Models/User.php', parser.parse(userContent));
+			asts.set('file:///workspace/src/Models/Post.php', parser.parse(postContent));
+
+			const handler = createHandler();
+			const params: DidChangeWatchedFilesParams = {
+				changes: [
+					{
+						uri: 'file:///workspace/src/Models/User.php',
+						type: FileChangeType.Created,
+					},
+					{
+						uri: 'file:///workspace/src/Models/Post.php',
+						type: FileChangeType.Created,
+					},
+					{
+						uri: 'file:///workspace/src/Old.php',
+						type: FileChangeType.Deleted,
+					},
+				],
+			};
+
+			handler(params);
+
+			const defCalls = defIndex.getCalls();
+			expect(defCalls.filter((c) => c.method === 'indexDocument').length).toBe(2);
+			expect(defCalls.filter((c) => c.method === 'clearDocument').length).toBe(1);
 		});
 	});
 });

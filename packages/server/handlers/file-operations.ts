@@ -1,13 +1,16 @@
 import type { Program } from '@pls/parser';
-import type {
-	CreateFilesParams,
-	DeleteFilesParams,
-	RenameFilesParams,
-	TextEdit,
-	WorkspaceEdit,
+import {
+	type CreateFilesParams,
+	type DeleteFilesParams,
+	type DidChangeWatchedFilesParams,
+	FileChangeType,
+	type RenameFilesParams,
+	type TextEdit,
+	type WorkspaceEdit,
 } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import type { DefinitionIndex } from '../definition-index';
+import type { DocumentManager } from '../document-manager';
 import {
 	createNamespaceEdit,
 	createTypeNameEdit,
@@ -295,6 +298,59 @@ export function createDidDeleteFilesHandler(
 		for (const file of params.files) {
 			definitionIndex.clearDocument(file.uri);
 			referenceIndex.clearDocument(file.uri);
+		}
+	};
+}
+
+export function createDidChangeWatchedFilesHandler(
+	getAst: (uri: string) => Program | null,
+	definitionIndex: DefinitionIndex,
+	referenceIndex: ReferenceIndex,
+	documentManager: DocumentManager,
+) {
+	return (params: DidChangeWatchedFilesParams): void => {
+		for (const change of params.changes) {
+			// Skip files currently open in the editor - they're handled by textDocument/didChange
+			if (documentManager.isOpen(change.uri)) {
+				continue;
+			}
+
+			// Skip non-PHP files
+			if (!isPhpFile(change.uri)) {
+				continue;
+			}
+
+			switch (change.type) {
+				case FileChangeType.Created:
+					// Index newly created file
+					if (!isVendorFile(change.uri)) {
+						const ast = getAst(change.uri);
+						if (ast) {
+							definitionIndex.indexDocument(change.uri, ast);
+							referenceIndex.indexDocument(change.uri, ast);
+						}
+					}
+					break;
+
+				case FileChangeType.Changed:
+					// Re-index changed file (clear old, add new)
+					if (!isVendorFile(change.uri)) {
+						definitionIndex.clearDocument(change.uri);
+						referenceIndex.clearDocument(change.uri);
+						const ast = getAst(change.uri);
+						if (ast) {
+							definitionIndex.indexDocument(change.uri, ast);
+							referenceIndex.indexDocument(change.uri, ast);
+						}
+					}
+					break;
+
+				case FileChangeType.Deleted:
+					// Clear from indexes
+					definitionIndex.clearDocument(change.uri);
+					referenceIndex.clearDocument(change.uri);
+					break;
+			}
 		}
 	};
 }
