@@ -50,6 +50,9 @@ export class SemanticValidator {
 		if (this.config.diagnostics.semanticChecks.undefinedMethod) {
 			diagnostics.push(...this.checkUndefinedMethods(uri, ast));
 		}
+		if (this.config.diagnostics.semanticChecks.missingParameters) {
+			diagnostics.push(...this.checkMissingParameters(uri, ast));
+		}
 
 		return diagnostics;
 	}
@@ -541,11 +544,36 @@ export class SemanticValidator {
 		}
 	}
 
-	private checkMissingParameters(): SemanticDiagnostic[] {
-		void this.definitionIndex;
-		void this.referenceIndex;
-		void this.config;
-		return [];
+	private checkMissingParameters(uri: string, ast: Program): SemanticDiagnostic[] {
+		const diagnostics: SemanticDiagnostic[] = [];
+
+		traverseProgram(ast, {
+			onCallExpression: (expr) => {
+				if (expr.callee.kind !== 'Identifier') return;
+
+				const functionName = expr.callee.name;
+				const def = this.definitionIndex.findDefinition(functionName, 'function');
+				if (!def || !def.parameters) return;
+
+				const requiredParams = def.parameters.filter(
+					(p) => !p.defaultValue && !p.variadic,
+				).length;
+				const providedArgs = expr.arguments.length;
+
+				if (providedArgs < requiredParams) {
+					const missing = requiredParams - providedArgs;
+					diagnostics.push({
+						severity: DiagnosticSeverity.Warning,
+						code: SemanticDiagnosticCode.MissingParameter,
+						message: `Missing ${missing} required parameter${missing > 1 ? 's' : ''} for function '${functionName}'`,
+						range: this.toRange(expr.loc),
+					});
+				}
+			},
+		});
+
+		void uri;
+		return diagnostics;
 	}
 
 	private hasClassDefinition(name: string): boolean {

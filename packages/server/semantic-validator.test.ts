@@ -420,4 +420,103 @@ trait MyTrait {
 			expect(diagnostics[0]?.message).toBe("Undefined method 'missingTraitMethod' in class 'MyTrait'");
 		});
 	});
+
+	describe('missing parameter detection', () => {
+		const parser = new Parser();
+		const configOnlyMissingParams = {
+			...defaultConfiguration,
+			diagnostics: {
+				...defaultConfiguration.diagnostics,
+				semanticChecks: {
+					...defaultConfiguration.diagnostics.semanticChecks,
+					undefinedClass: false,
+					undefinedFunction: false,
+					unusedImports: false,
+					undefinedMethod: false,
+				},
+			},
+		};
+
+		test('reports missing required parameter', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), configOnlyMissingParams);
+
+			const defAst = parser.parse('<?php function myFunc($a, $b) {}');
+			index.indexDocument('file:///def.php', defAst);
+
+			const callAst = parser.parse('<?php myFunc(1);');
+			const diagnostics = validator.validateDocument('file:///test.php', callAst);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.code).toBe(SemanticDiagnosticCode.MissingParameter);
+			expect(diagnostics[0]?.severity).toBe(DiagnosticSeverity.Warning);
+			expect(diagnostics[0]?.message).toBe("Missing 1 required parameter for function 'myFunc'");
+		});
+
+		test('reports multiple missing parameters', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), configOnlyMissingParams);
+
+			const defAst = parser.parse('<?php function myFunc($a, $b, $c) {}');
+			index.indexDocument('file:///def.php', defAst);
+
+			const callAst = parser.parse('<?php myFunc();');
+			const diagnostics = validator.validateDocument('file:///test.php', callAst);
+
+			expect(diagnostics).toHaveLength(1);
+			expect(diagnostics[0]?.message).toBe("Missing 3 required parameters for function 'myFunc'");
+		});
+
+		test('does not report when all required params provided', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), configOnlyMissingParams);
+
+			const defAst = parser.parse('<?php function myFunc($a, $b) {}');
+			index.indexDocument('file:///def.php', defAst);
+
+			const callAst = parser.parse('<?php myFunc(1, 2);');
+			const diagnostics = validator.validateDocument('file:///test.php', callAst);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('optional parameters do not trigger missing parameter', () => {
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), configOnlyMissingParams);
+
+			const defAst = parser.parse('<?php function myFunc($a, $b = 2) {}');
+			index.indexDocument('file:///def.php', defAst);
+
+			const callAst = parser.parse('<?php myFunc(1);');
+			const diagnostics = validator.validateDocument('file:///test.php', callAst);
+
+			expect(diagnostics).toEqual([]);
+		});
+
+		test('respects missingParameters config toggle', () => {
+			const config = {
+				...defaultConfiguration,
+				diagnostics: {
+					...defaultConfiguration.diagnostics,
+					semanticChecks: {
+						...defaultConfiguration.diagnostics.semanticChecks,
+						missingParameters: false,
+					},
+				},
+			};
+			const index = new DefinitionIndex();
+			const validator = new SemanticValidator(index, new ReferenceIndex(), config);
+
+			const defAst = parser.parse('<?php function myFunc($a, $b) {}');
+			index.indexDocument('file:///def.php', defAst);
+
+			const callAst = parser.parse('<?php myFunc(1);');
+			const diagnostics = validator.validateDocument('file:///test.php', callAst);
+
+			const missingParamDiags = diagnostics.filter(
+				(d) => d.code === SemanticDiagnosticCode.MissingParameter,
+			);
+			expect(missingParamDiags).toEqual([]);
+		});
+	});
 });
