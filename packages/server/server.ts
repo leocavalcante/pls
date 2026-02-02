@@ -1,9 +1,9 @@
 import { Parser } from '@pls/parser';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
+	DidChangeConfigurationNotification,
 	type InitializeParams,
 	type InitializeResult,
-	DidChangeConfigurationNotification,
 	ProposedFeatures,
 	TextDocumentSyncKind,
 	TextDocuments,
@@ -45,6 +45,7 @@ import { createFormattingHandler, createRangeFormattingHandler } from './handler
 import { createHoverHandler } from './handlers/hover';
 import { createImplementationHandler } from './handlers/implementation';
 import { createInlayHintsHandler } from './handlers/inlay-hints';
+import { createInlineValueHandler } from './handlers/inline-values';
 import { createLinkedEditingHandler } from './handlers/linked-editing';
 import {
 	ON_TYPE_TRIGGER_CHARACTERS,
@@ -91,7 +92,7 @@ let hasConfigurationCapability = false;
 connection.onInitialize((params: InitializeParams): InitializeResult => {
 	initializeParams = params;
 	workspaceFolders = params.workspaceFolders ?? [];
-	hasConfigurationCapability = !!(params.capabilities.workspace?.configuration);
+	hasConfigurationCapability = !!params.capabilities.workspace?.configuration;
 	connection.console.log('PHP Language Server initializing...');
 
 	return {
@@ -136,6 +137,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 				full: true,
 			},
 			inlayHintProvider: true,
+			inlineValueProvider: true,
 			documentLinkProvider: {
 				resolveProvider: false,
 			},
@@ -403,6 +405,15 @@ connection.languages.inlayHint.on(
 		(uri) => documentManager.getAst(uri),
 		definitionIndex,
 		(uri) => configurationManager.getConfiguration(uri),
+	),
+);
+
+connection.languages.inlineValue.on(
+	createInlineValueHandler(
+		(uri) => documents.get(uri),
+		(uri) => documentManager.getAst(uri),
+		definitionIndex,
+		(uri) => configurationManager.getConfiguration(uri).then((c) => c.inlineValues),
 	),
 );
 
