@@ -1014,7 +1014,8 @@ function checkExtractVariable(
 
 			// Check if expression is within the selection
 			if (
-				(nodeStartLine > startLine || (nodeStartLine === startLine && nodeStartChar >= startChar)) &&
+				(nodeStartLine > startLine ||
+					(nodeStartLine === startLine && nodeStartChar >= startChar)) &&
 				(nodeEndLine < endLine || (nodeEndLine === endLine && nodeEndChar <= endChar))
 			) {
 				foundExpression = true;
@@ -1081,7 +1082,8 @@ function checkExtractConstant(
 			const nodeEndChar = node.loc.end.column;
 
 			if (
-				(nodeStartLine > startLine || (nodeStartLine === startLine && nodeStartChar >= startChar)) &&
+				(nodeStartLine > startLine ||
+					(nodeStartLine === startLine && nodeStartChar >= startChar)) &&
 				(nodeEndLine < endLine || (nodeEndLine === endLine && nodeEndChar <= endChar))
 			) {
 				foundExpression = true;
@@ -1747,7 +1749,7 @@ function checkExtractInterface(
 	}
 
 	// Check if class has public methods
-	const publicMethods = (classDecl.body.members.filter((member) => {
+	const publicMethods = classDecl.body.members.filter((member) => {
 		if (member.kind !== 'MethodDeclaration') return false;
 		const method = member as MethodDeclaration;
 		return (
@@ -1756,7 +1758,7 @@ function checkExtractInterface(
 			!method.isAbstract &&
 			method.name.name !== '__construct'
 		);
-	}) as MethodDeclaration[]);
+	}) as MethodDeclaration[];
 
 	if (publicMethods.length === 0) {
 		return null;
@@ -1884,11 +1886,7 @@ function checkInlineMethod(
 			for (const member of classDecl.body.members) {
 				if (member.kind === 'MethodDeclaration') {
 					const method = member as MethodDeclaration;
-					if (
-						method.name.name === methodName &&
-						method.visibility !== 'public' &&
-						method.body
-					) {
+					if (method.name.name === methodName && method.visibility !== 'public' && method.body) {
 						canInline = true;
 					}
 				}
@@ -1932,7 +1930,11 @@ function findParentCallExpression(
 			const callExpr = node as { callee?: { kind: string; name?: string } };
 			// Check if position is specifically on the callee identifier
 			if (callExpr.callee && 'loc' in callExpr.callee) {
-				const calleeLoc = (callExpr.callee as { loc: { start: { line: number; column: number }; end: { line: number; column: number } } }).loc;
+				const calleeLoc = (
+					callExpr.callee as {
+						loc: { start: { line: number; column: number }; end: { line: number; column: number } };
+					}
+				).loc;
 				if (
 					position.line + 1 >= calleeLoc.start.line &&
 					position.line + 1 <= calleeLoc.end.line &&

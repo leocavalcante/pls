@@ -1,5 +1,5 @@
-import type { TextEdit, Range, Position } from 'vscode-languageserver';
-import type { Node, Location, Expression, Statement } from '@pls/parser';
+import type { Expression, Location, Node, Statement } from '@pls/parser';
+import type { Position, Range, TextEdit } from 'vscode-languageserver';
 
 export interface RefactoringEdit {
 	uri: string;
@@ -51,11 +51,7 @@ export interface ChangeSignatureResult {
 }
 
 // AST position utilities
-export function containsPosition(
-	node: Node,
-	line: number,
-	column: number,
-): boolean {
+export function containsPosition(node: Node, line: number, column: number): boolean {
 	return (
 		(node.loc.start.line < line ||
 			(node.loc.start.line === line && node.loc.start.column <= column)) &&
@@ -135,10 +131,7 @@ export function isExtractableExpression(node: Node): node is Expression {
 }
 
 // Generate a unique variable name
-export function generateVariableName(
-	baseName: string,
-	existingNames: Set<string>,
-): string {
+export function generateVariableName(baseName: string, existingNames: Set<string>): string {
 	let name = baseName;
 	let counter = 1;
 	while (existingNames.has(name)) {
@@ -149,10 +142,7 @@ export function generateVariableName(
 }
 
 // Generate a unique constant name
-export function generateConstantName(
-	baseName: string,
-	existingNames: Set<string>,
-): string {
+export function generateConstantName(baseName: string, existingNames: Set<string>): string {
 	let name = baseName.toUpperCase();
 	let counter = 1;
 	while (existingNames.has(name)) {
@@ -226,10 +216,7 @@ export function getIndentation(text: string, line: number): string {
 }
 
 // Create a text edit for insertion
-export function createInsertEdit(
-	position: Position,
-	newText: string,
-): TextEdit {
+export function createInsertEdit(position: Position, newText: string): TextEdit {
 	return {
 		range: {
 			start: position,
@@ -240,10 +227,7 @@ export function createInsertEdit(
 }
 
 // Create a text edit for replacement
-export function createReplaceEdit(
-	range: Range,
-	newText: string,
-): TextEdit {
+export function createReplaceEdit(range: Range, newText: string): TextEdit {
 	return {
 		range,
 		newText,
@@ -260,8 +244,5 @@ export function createDeleteEdit(range: Range): TextEdit {
 
 // Check if a range is empty (insertion point)
 export function isEmptyRange(range: Range): boolean {
-	return (
-		range.start.line === range.end.line &&
-		range.start.character === range.end.character
-	);
+	return range.start.line === range.end.line && range.start.character === range.end.character;
 }

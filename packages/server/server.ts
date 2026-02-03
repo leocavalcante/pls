@@ -35,16 +35,14 @@ import {
 import { createDocumentHighlightsHandler } from './handlers/document-highlights';
 import { createDocumentLinksHandler } from './handlers/document-links';
 import {
+	PLS_COMMANDS,
 	createExecuteCommandHandler,
 	getRegisteredCommands,
 	registerRefactoringCommand,
-	PLS_COMMANDS,
 } from './handlers/execute-command';
-import { handleExtractVariable } from './handlers/extract-variable-command';
 import { handleExtractConstant } from './handlers/extract-constant-command';
 import { handleExtractInterface } from './handlers/extract-interface-command';
-import { handleInlineVariable } from './handlers/inline-variable-command';
-import { handleInlineMethod } from './handlers/inline-method-command';
+import { handleExtractVariable } from './handlers/extract-variable-command';
 import {
 	createDidChangeWatchedFilesHandler,
 	createDidCreateFilesHandler,
@@ -64,7 +62,9 @@ import { createHoverHandler } from './handlers/hover';
 import { createImplementationHandler } from './handlers/implementation';
 import { createInlayHintsHandler } from './handlers/inlay-hints';
 import { createInlineCompletionHandler } from './handlers/inline-completion';
+import { handleInlineMethod } from './handlers/inline-method-command';
 import { createInlineValueHandler } from './handlers/inline-values';
+import { handleInlineVariable } from './handlers/inline-variable-command';
 import { createLinkedEditingHandler } from './handlers/linked-editing';
 import { createMonikerHandler } from './handlers/moniker';
 import {

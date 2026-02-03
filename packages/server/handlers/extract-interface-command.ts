@@ -1,8 +1,15 @@
-import type { WorkspaceEdit, TextEdit } from 'vscode-languageserver';
-import type { Program, ClassDeclaration, MethodDeclaration, Identifier, TypeNode, Parameter } from '@pls/parser';
-import type { ExtractInterfaceArgs, RefactoringContext } from './execute-command';
-import { locationToRange } from '../refactoring-utils';
+import type {
+	ClassDeclaration,
+	Identifier,
+	MethodDeclaration,
+	Parameter,
+	Program,
+	TypeNode,
+} from '@pls/parser';
+import type { TextEdit, WorkspaceEdit } from 'vscode-languageserver';
 import { findNamespaceStatement, findUseStatements } from '../file-operation-utils';
+import { locationToRange } from '../refactoring-utils';
+import type { ExtractInterfaceArgs, RefactoringContext } from './execute-command';
 
 export async function handleExtractInterface(
 	args: ExtractInterfaceArgs,
@@ -235,10 +242,7 @@ function calculateInterfaceFileUri(classUri: string, interfaceName: string): str
 	return uriParts.join('/');
 }
 
-function createImplementsEdit(
-	classDecl: ClassDeclaration,
-	interfaceName: string,
-): TextEdit | null {
+function createImplementsEdit(classDecl: ClassDeclaration, interfaceName: string): TextEdit | null {
 	// Check if class already implements something
 	const hasImplements = classDecl.implements.length > 0;
 
@@ -247,7 +251,10 @@ function createImplementsEdit(
 		const lastImplement = classDecl.implements[classDecl.implements.length - 1];
 		return {
 			range: {
-				start: { line: lastImplement.loc.end.line - 1, character: lastImplement.loc.end.column - 1 },
+				start: {
+					line: lastImplement.loc.end.line - 1,
+					character: lastImplement.loc.end.column - 1,
+				},
 				end: { line: lastImplement.loc.end.line - 1, character: lastImplement.loc.end.column - 1 },
 			},
 			newText: `, ${interfaceName}`,

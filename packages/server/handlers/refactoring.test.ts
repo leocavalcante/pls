@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Parser } from '@pls/parser';
-import { handleExtractVariable } from './extract-variable-command';
-import { handleExtractConstant } from './extract-constant-command';
-import { handleExtractInterface } from './extract-interface-command';
-import { handleInlineVariable } from './inline-variable-command';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DefinitionIndex } from '../definition-index';
 import { ReferenceIndex } from '../reference-index';
+import { handleExtractConstant } from './extract-constant-command';
+import { handleExtractInterface } from './extract-interface-command';
+import { handleExtractVariable } from './extract-variable-command';
+import { handleInlineVariable } from './inline-variable-command';
 
 const parser = new Parser();
 

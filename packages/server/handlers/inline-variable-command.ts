@@ -1,7 +1,7 @@
-import type { WorkspaceEdit, TextEdit, Range } from 'vscode-languageserver';
-import type { Program, Variable, Expression, AssignmentExpression, Statement } from '@pls/parser';
+import type { AssignmentExpression, Expression, Program, Statement, Variable } from '@pls/parser';
+import type { Range, TextEdit, WorkspaceEdit } from 'vscode-languageserver';
+import { containsPosition, locationToRange } from '../refactoring-utils';
 import { traverseAst } from './document-links';
-import { locationToRange, containsPosition } from '../refactoring-utils';
 import type { InlineVariableArgs, RefactoringContext } from './execute-command';
 
 export async function handleInlineVariable(
@@ -130,7 +130,10 @@ function findContainingStatement(ast: Program, node: Expression): Statement | nu
 	return null;
 }
 
-function findStatementContainingNode(statement: Statement, targetNode: Expression): Statement | null {
+function findStatementContainingNode(
+	statement: Statement,
+	targetNode: Expression,
+): Statement | null {
 	// Check if this statement contains the target node
 	if (statement.kind === 'ExpressionStatement' && statement.expression === targetNode) {
 		return statement;

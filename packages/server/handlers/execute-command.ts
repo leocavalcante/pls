@@ -1,6 +1,6 @@
+import type { Program } from '@pls/parser';
 import type { ExecuteCommandParams, WorkspaceEdit } from 'vscode-languageserver';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { Program } from '@pls/parser';
 import type { DefinitionIndex } from '../definition-index';
 import type { ReferenceIndex } from '../reference-index';
 

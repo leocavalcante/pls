@@ -1,12 +1,12 @@
-import type { WorkspaceEdit, TextEdit } from 'vscode-languageserver';
-import type { Program, Expression, ClassDeclaration, Statement } from '@pls/parser';
-import { traverseAst } from './document-links';
+import type { ClassDeclaration, Expression, Program } from '@pls/parser';
+import type { TextEdit, WorkspaceEdit } from 'vscode-languageserver';
 import {
-	locationToRange,
-	getBaseNameFromExpression,
 	generateConstantName,
+	getBaseNameFromExpression,
 	getIndentation,
+	locationToRange,
 } from '../refactoring-utils';
+import { traverseAst } from './document-links';
 import type { ExtractConstantArgs, RefactoringContext } from './execute-command';
 
 export async function handleExtractConstant(
@@ -153,8 +153,12 @@ function isExpressionNode(node: { kind: string }): boolean {
 }
 
 function isMoreSpecificExpression(
-	candidate: { loc: { start: { line: number; column: number }; end: { line: number; column: number } } },
-	current: { loc: { start: { line: number; column: number }; end: { line: number; column: number } } },
+	candidate: {
+		loc: { start: { line: number; column: number }; end: { line: number; column: number } };
+	},
+	current: {
+		loc: { start: { line: number; column: number }; end: { line: number; column: number } };
+	},
 	startLine: number,
 	startChar: number,
 	endLine: number,
@@ -170,9 +174,12 @@ function isMoreSpecificExpression(
 	const currentEndLine = current.loc.end.line;
 	const currentEndChar = current.loc.end.column;
 
-	const candidateDiffStart = Math.abs(candidateStartLine - startLine) + Math.abs(candidateStartChar - startChar);
-	const candidateDiffEnd = Math.abs(candidateEndLine - endLine) + Math.abs(candidateEndChar - endChar);
-	const currentDiffStart = Math.abs(currentStartLine - startLine) + Math.abs(currentStartChar - startChar);
+	const candidateDiffStart =
+		Math.abs(candidateStartLine - startLine) + Math.abs(candidateStartChar - startChar);
+	const candidateDiffEnd =
+		Math.abs(candidateEndLine - endLine) + Math.abs(candidateEndChar - endChar);
+	const currentDiffStart =
+		Math.abs(currentStartLine - startLine) + Math.abs(currentStartChar - startChar);
 	const currentDiffEnd = Math.abs(currentEndLine - endLine) + Math.abs(currentEndChar - endChar);
 
 	return candidateDiffStart + candidateDiffEnd < currentDiffStart + currentDiffEnd;
@@ -197,7 +204,10 @@ function findClassContainingExpression(
 	return null;
 }
 
-function findConstantInsertPosition(classDecl: ClassDeclaration): { line: number; character: number } {
+function findConstantInsertPosition(classDecl: ClassDeclaration): {
+	line: number;
+	character: number;
+} {
 	// Find the position after the last constant or property, but before the first method
 	let lastConstOrPropLine = classDecl.body.loc.start.line;
 	let firstMethodLine = classDecl.body.loc.end.line;

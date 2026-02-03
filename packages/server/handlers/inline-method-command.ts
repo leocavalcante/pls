@@ -1,7 +1,15 @@
-import type { WorkspaceEdit, TextEdit } from 'vscode-languageserver';
-import type { Program, MethodDeclaration, ClassDeclaration, Statement, Expression, Variable, CallExpression } from '@pls/parser';
+import type {
+	CallExpression,
+	ClassDeclaration,
+	Expression,
+	MethodDeclaration,
+	Program,
+	Statement,
+	Variable,
+} from '@pls/parser';
+import type { TextEdit, WorkspaceEdit } from 'vscode-languageserver';
+import { containsPosition, getIndentation, locationToRange } from '../refactoring-utils';
 import { traverseAst } from './document-links';
-import { locationToRange, containsPosition, getIndentation } from '../refactoring-utils';
 import type { InlineMethodArgs, RefactoringContext } from './execute-command';
 
 export async function handleInlineMethod(
@@ -110,7 +118,12 @@ function findMethodDeclaration(ast: Program, methodName: string): MethodDeclarat
 }
 
 function extractMethodBody(
-	document: { getText: (range: { start: { line: number; character: number }; end: { line: number; character: number } }) => string },
+	document: {
+		getText: (range: {
+			start: { line: number; character: number };
+			end: { line: number; character: number };
+		}) => string;
+	},
 	methodDecl: MethodDeclaration,
 ): string | null {
 	if (!methodDecl.body) {
