@@ -218,6 +218,21 @@ function collectRefactoringActions(
 		actions.push(extractConstantAction);
 	}
 
+	const extractInterfaceAction = checkExtractInterface(document, uri, ast, range);
+	if (extractInterfaceAction) {
+		actions.push(extractInterfaceAction);
+	}
+
+	const inlineVariableAction = checkInlineVariable(document, uri, ast, range);
+	if (inlineVariableAction) {
+		actions.push(inlineVariableAction);
+	}
+
+	const inlineMethodAction = checkInlineMethod(document, uri, ast, range);
+	if (inlineMethodAction) {
+		actions.push(inlineMethodAction);
+	}
+
 	const gettersSettersAction = checkGenerateGettersSetters(uri, ast, range.start);
 	if (gettersSettersAction) {
 		actions.push(gettersSettersAction);
@@ -1692,4 +1707,243 @@ function toPascalCase(str: string): string {
 		.split('_')
 		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 		.join('');
+}
+
+function checkExtractInterface(
+	document: TextDocument,
+	uri: string,
+	ast: Program,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+): CodeAction | null {
+	// Only show when cursor is on a class declaration (not a selection)
+	if (range.start.line !== range.end.line || range.start.character !== range.end.character) {
+		return null;
+	}
+
+	const node = findNodeAtPosition(ast, range.start);
+	if (!node) {
+		return null;
+	}
+
+	// Check if cursor is on a class name
+	let classDecl: ClassDeclaration | null = null;
+	if (node.kind === 'Identifier') {
+		// Check if this identifier is a class name
+		for (const stmt of ast.statements) {
+			if (
+				stmt.kind === 'ClassDeclaration' &&
+				(stmt as ClassDeclaration).name === (node as Identifier)
+			) {
+				classDecl = stmt as ClassDeclaration;
+				break;
+			}
+		}
+	} else if (node.kind === 'ClassDeclaration') {
+		classDecl = node as ClassDeclaration;
+	}
+
+	if (!classDecl) {
+		return null;
+	}
+
+	// Check if class has public methods
+	const publicMethods = (classDecl.body.members.filter((member) => {
+		if (member.kind !== 'MethodDeclaration') return false;
+		const method = member as MethodDeclaration;
+		return (
+			method.visibility === 'public' &&
+			!method.isStatic &&
+			!method.isAbstract &&
+			method.name.name !== '__construct'
+		);
+	}) as MethodDeclaration[]);
+
+	if (publicMethods.length === 0) {
+		return null;
+	}
+
+	const interfaceName = `${classDecl.name.name}Interface`;
+
+	return {
+		title: `Extract interface ${interfaceName}`,
+		kind: CodeActionKind.RefactorRewrite,
+		command: {
+			title: 'Extract interface',
+			command: 'pls.extractInterface',
+			arguments: [
+				{
+					uri,
+					className: classDecl.name.name,
+					interfaceName,
+				},
+			],
+		},
+	};
+}
+
+function checkInlineVariable(
+	document: TextDocument,
+	uri: string,
+	ast: Program,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+): CodeAction | null {
+	// Only show for cursor position (not selection)
+	if (range.start.line !== range.end.line || range.start.character !== range.end.character) {
+		return null;
+	}
+
+	const node = findNodeAtPosition(ast, range.start);
+	if (!node) {
+		return null;
+	}
+
+	// Check if cursor is on a variable
+	if (node.kind !== 'Variable') {
+		return null;
+	}
+
+	const variable = node as Variable;
+	const variableName = variable.name;
+
+	// Find the variable declaration (assignment)
+	let hasDeclaration = false;
+	traverseAstForVariableExtraction(ast, (n) => {
+		if (
+			n.kind === 'ExpressionStatement' &&
+			n.expression?.kind === 'AssignmentExpression' &&
+			n.expression.left?.kind === 'Variable' &&
+			n.expression.left.name === variableName &&
+			n.expression.right
+		) {
+			hasDeclaration = true;
+		}
+	});
+
+	if (!hasDeclaration) {
+		return null;
+	}
+
+	return {
+		title: `Inline variable $${variableName}`,
+		kind: CodeActionKind.RefactorInline,
+		command: {
+			title: 'Inline variable',
+			command: 'pls.inlineVariable',
+			arguments: [
+				{
+					uri,
+					line: range.start.line,
+					character: range.start.character,
+					variableName,
+				},
+			],
+		},
+	};
+}
+
+function checkInlineMethod(
+	document: TextDocument,
+	uri: string,
+	ast: Program,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+): CodeAction | null {
+	// Only show for cursor position (not selection)
+	if (range.start.line !== range.end.line || range.start.character !== range.end.character) {
+		return null;
+	}
+
+	const node = findNodeAtPosition(ast, range.start);
+	if (!node) {
+		return null;
+	}
+
+	// Check if cursor is on a method call
+	let methodName: string | null = null;
+	if (node.kind === 'CallExpression' || node.kind === 'MethodCallExpression') {
+		const callExpr = node as { callee?: { kind: string; name?: string } };
+		if (callExpr.callee?.kind === 'Identifier' && callExpr.callee.name) {
+			methodName = callExpr.callee.name;
+		}
+	} else if (node.kind === 'Identifier') {
+		// Check if parent is a call expression
+		const parentCall = findParentCallExpression(ast, range.start);
+		if (parentCall && parentCall.callee?.kind === 'Identifier') {
+			methodName = parentCall.callee.name;
+		}
+	}
+
+	if (!methodName) {
+		return null;
+	}
+
+	// Find the method declaration and check if it's private/protected
+	let canInline = false;
+	for (const stmt of ast.statements) {
+		if (stmt.kind === 'ClassDeclaration') {
+			const classDecl = stmt as ClassDeclaration;
+			for (const member of classDecl.body.members) {
+				if (member.kind === 'MethodDeclaration') {
+					const method = member as MethodDeclaration;
+					if (
+						method.name.name === methodName &&
+						method.visibility !== 'public' &&
+						method.body
+					) {
+						canInline = true;
+					}
+				}
+			}
+		}
+	}
+
+	if (!canInline) {
+		return null;
+	}
+
+	return {
+		title: `Inline method ${methodName}()`,
+		kind: CodeActionKind.RefactorInline,
+		command: {
+			title: 'Inline method',
+			command: 'pls.inlineMethod',
+			arguments: [
+				{
+					uri,
+					line: range.start.line,
+					character: range.start.character,
+					methodName,
+				},
+			],
+		},
+	};
+}
+
+function findParentCallExpression(
+	ast: Program,
+	position: { line: number; character: number },
+): { callee?: { kind: string; name?: string } } | null {
+	let foundCall: { callee?: { kind: string; name?: string } } | null = null;
+
+	traverseAstForVariableExtraction(ast, (node) => {
+		if (
+			(node.kind === 'CallExpression' || node.kind === 'MethodCallExpression') &&
+			containsPosition(node, position.line + 1, position.character + 1)
+		) {
+			const callExpr = node as { callee?: { kind: string; name?: string } };
+			// Check if position is specifically on the callee identifier
+			if (callExpr.callee && 'loc' in callExpr.callee) {
+				const calleeLoc = (callExpr.callee as { loc: { start: { line: number; column: number }; end: { line: number; column: number } } }).loc;
+				if (
+					position.line + 1 >= calleeLoc.start.line &&
+					position.line + 1 <= calleeLoc.end.line &&
+					position.character + 1 >= calleeLoc.start.column &&
+					position.character + 1 <= calleeLoc.end.column
+				) {
+					foundCall = callExpr;
+				}
+			}
+		}
+	});
+
+	return foundCall;
 }

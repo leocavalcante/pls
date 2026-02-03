@@ -42,6 +42,9 @@ import {
 } from './handlers/execute-command';
 import { handleExtractVariable } from './handlers/extract-variable-command';
 import { handleExtractConstant } from './handlers/extract-constant-command';
+import { handleExtractInterface } from './handlers/extract-interface-command';
+import { handleInlineVariable } from './handlers/inline-variable-command';
+import { handleInlineMethod } from './handlers/inline-method-command';
 import {
 	createDidChangeWatchedFilesHandler,
 	createDidCreateFilesHandler,
@@ -411,6 +414,9 @@ const refactoringContext = {
 
 registerRefactoringCommand(PLS_COMMANDS.EXTRACT_VARIABLE, handleExtractVariable);
 registerRefactoringCommand(PLS_COMMANDS.EXTRACT_CONSTANT, handleExtractConstant);
+registerRefactoringCommand(PLS_COMMANDS.EXTRACT_INTERFACE, handleExtractInterface);
+registerRefactoringCommand(PLS_COMMANDS.INLINE_VARIABLE, handleInlineVariable);
+registerRefactoringCommand(PLS_COMMANDS.INLINE_METHOD, handleInlineMethod);
 
 connection.onExecuteCommand(createExecuteCommandHandler(refactoringContext));
 
