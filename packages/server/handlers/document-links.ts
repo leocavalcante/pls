@@ -72,7 +72,7 @@ function resolvePathToUri(baseUri: string, filePath: string): string | null {
 	}
 }
 
-function traverseAst(node: Node | Node[], visitor: (node: Node) => void): void {
+export function traverseAst(node: Node | Node[], visitor: (node: Node) => void): void {
 	if (Array.isArray(node)) {
 		for (const item of node) {
 			traverseAst(item, visitor);
