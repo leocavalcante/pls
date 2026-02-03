@@ -34,7 +34,14 @@ import {
 } from './handlers/diagnostics';
 import { createDocumentHighlightsHandler } from './handlers/document-highlights';
 import { createDocumentLinksHandler } from './handlers/document-links';
-import { createExecuteCommandHandler, getRegisteredCommands } from './handlers/execute-command';
+import {
+	createExecuteCommandHandler,
+	getRegisteredCommands,
+	registerRefactoringCommand,
+	PLS_COMMANDS,
+} from './handlers/execute-command';
+import { handleExtractVariable } from './handlers/extract-variable-command';
+import { handleExtractConstant } from './handlers/extract-constant-command';
 import {
 	createDidChangeWatchedFilesHandler,
 	createDidCreateFilesHandler,
@@ -394,7 +401,18 @@ connection.onCodeAction(
 	),
 );
 
-connection.onExecuteCommand(createExecuteCommandHandler());
+// Register refactoring command handlers
+const refactoringContext = {
+	getDocument: (uri: string) => documents.get(uri),
+	getAst: (uri: string) => documentManager.getAst(uri),
+	definitionIndex,
+	referenceIndex,
+};
+
+registerRefactoringCommand(PLS_COMMANDS.EXTRACT_VARIABLE, handleExtractVariable);
+registerRefactoringCommand(PLS_COMMANDS.EXTRACT_CONSTANT, handleExtractConstant);
+
+connection.onExecuteCommand(createExecuteCommandHandler(refactoringContext));
 
 connection.languages.diagnostics.on(
 	createDiagnosticHandler((uri) => documents.get(uri), documentManager),

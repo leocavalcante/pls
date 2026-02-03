@@ -208,6 +208,16 @@ function collectRefactoringActions(
 		actions.push(extractMethodAction);
 	}
 
+	const extractVariableAction = checkExtractVariable(document, uri, ast, range);
+	if (extractVariableAction) {
+		actions.push(extractVariableAction);
+	}
+
+	const extractConstantAction = checkExtractConstant(document, uri, ast, range);
+	if (extractConstantAction) {
+		actions.push(extractConstantAction);
+	}
+
 	const gettersSettersAction = checkGenerateGettersSetters(uri, ast, range.start);
 	if (gettersSettersAction) {
 		actions.push(gettersSettersAction);
@@ -956,6 +966,198 @@ function checkExtractMethod(
 			},
 		},
 	};
+}
+
+function checkExtractVariable(
+	document: TextDocument,
+	uri: string,
+	ast: Program,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+): CodeAction | null {
+	// Only show for non-empty selections (cursor on an expression)
+	if (range.start.line === range.end.line && range.start.character === range.end.character) {
+		// Check if cursor is on an expression
+		const node = findNodeAtPosition(ast, range.start);
+		if (!node || !isExtractableExpression(node)) {
+			return null;
+		}
+	}
+
+	// For selection, check if it contains an extractable expression
+	const startLine = range.start.line + 1;
+	const startChar = range.start.character + 1;
+	const endLine = range.end.line + 1;
+	const endChar = range.end.character + 1;
+
+	let foundExpression = false;
+	traverseAstForVariableExtraction(ast, (node) => {
+		if (isExtractableExpression(node)) {
+			const nodeStartLine = node.loc.start.line;
+			const nodeStartChar = node.loc.start.column;
+			const nodeEndLine = node.loc.end.line;
+			const nodeEndChar = node.loc.end.column;
+
+			// Check if expression is within the selection
+			if (
+				(nodeStartLine > startLine || (nodeStartLine === startLine && nodeStartChar >= startChar)) &&
+				(nodeEndLine < endLine || (nodeEndLine === endLine && nodeEndChar <= endChar))
+			) {
+				foundExpression = true;
+			}
+		}
+	});
+
+	if (!foundExpression) {
+		return null;
+	}
+
+	return {
+		title: 'Extract variable',
+		kind: CodeActionKind.RefactorExtract,
+		command: {
+			title: 'Extract variable',
+			command: 'pls.extractVariable',
+			arguments: [
+				{
+					uri,
+					startLine: range.start.line,
+					startChar: range.start.character,
+					endLine: range.end.line,
+					endChar: range.end.character,
+					variableName: null,
+				},
+			],
+		},
+	};
+}
+
+function checkExtractConstant(
+	document: TextDocument,
+	uri: string,
+	ast: Program,
+	range: { start: { line: number; character: number }; end: { line: number; character: number } },
+): CodeAction | null {
+	// Only show for non-empty selections
+	if (range.start.line === range.end.line && range.start.character === range.end.character) {
+		const node = findNodeAtPosition(ast, range.start);
+		if (!node || !isExtractableExpression(node)) {
+			return null;
+		}
+	}
+
+	// Check if we're inside a class
+	const classDecl = findClassContainingPosition(ast, range.start);
+	if (!classDecl) {
+		return null;
+	}
+
+	// Check if selection contains an extractable expression
+	const startLine = range.start.line + 1;
+	const startChar = range.start.character + 1;
+	const endLine = range.end.line + 1;
+	const endChar = range.end.character + 1;
+
+	let foundExpression = false;
+	traverseAstForVariableExtraction(ast, (node) => {
+		if (isExtractableExpression(node)) {
+			const nodeStartLine = node.loc.start.line;
+			const nodeStartChar = node.loc.start.column;
+			const nodeEndLine = node.loc.end.line;
+			const nodeEndChar = node.loc.end.column;
+
+			if (
+				(nodeStartLine > startLine || (nodeStartLine === startLine && nodeStartChar >= startChar)) &&
+				(nodeEndLine < endLine || (nodeEndLine === endLine && nodeEndChar <= endChar))
+			) {
+				foundExpression = true;
+			}
+		}
+	});
+
+	if (!foundExpression) {
+		return null;
+	}
+
+	return {
+		title: 'Extract constant',
+		kind: CodeActionKind.RefactorExtract,
+		command: {
+			title: 'Extract constant',
+			command: 'pls.extractConstant',
+			arguments: [
+				{
+					uri,
+					startLine: range.start.line,
+					startChar: range.start.character,
+					endLine: range.end.line,
+					endChar: range.end.character,
+					constantName: null,
+				},
+			],
+		},
+	};
+}
+
+function isExtractableExpression(node: Node): node is Expression {
+	const extractableKinds = [
+		'Literal',
+		'Variable',
+		'PropertyAccessExpression',
+		'StaticPropertyAccessExpression',
+		'CallExpression',
+		'StaticCallExpression',
+		'MethodCallExpression',
+		'NullsafeMethodCallExpression',
+		'ArrayExpression',
+		'NewExpression',
+		'TernaryExpression',
+		'BinaryExpression',
+		'UnaryExpression',
+		'CastExpression',
+		'CloneExpression',
+		'AssignOpExpression',
+		'IssetExpression',
+		'EmptyExpression',
+		'EvalExpression',
+		'ExitExpression',
+		'YieldExpression',
+		'YieldFromExpression',
+		'PrintExpression',
+		'ShellCommandExpression',
+		'ArrowFunction',
+		'Closure',
+	];
+	return 'kind' in node && extractableKinds.includes(node.kind);
+}
+
+function traverseAstForVariableExtraction(
+	node: Node | Node[],
+	visitor: (node: Node) => void,
+): void {
+	if (Array.isArray(node)) {
+		for (const item of node) {
+			traverseAstForVariableExtraction(item, visitor);
+		}
+		return;
+	}
+
+	visitor(node);
+
+	// Traverse child nodes
+	for (const key in node) {
+		const value = (node as Record<string, unknown>)[key];
+		if (value && typeof value === 'object') {
+			if (Array.isArray(value)) {
+				for (const item of value) {
+					if (item && typeof item === 'object' && 'kind' in item) {
+						traverseAstForVariableExtraction(item as Node, visitor);
+					}
+				}
+			} else if ('kind' in value) {
+				traverseAstForVariableExtraction(value as Node, visitor);
+			}
+		}
+	}
 }
 
 function findMethodContainingRange(
